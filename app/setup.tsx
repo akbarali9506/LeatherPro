@@ -24,33 +24,11 @@ export default function SetupScreen() {
     setLoading(true);
     setError('');
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Create organization
-      const { data: org, error: orgErr } = await supabase
-        .from('organizations')
-        .insert({ name: orgName.trim() })
-        .select()
-        .single();
-      if (orgErr) throw orgErr;
-
-      // Assign user as director + link to org
-      const { error: profileErr } = await supabase
-        .from('profiles')
-        .update({ organization_id: org.id, role: 'director' })
-        .eq('id', user.id);
-      if (profileErr) throw profileErr;
-
-      // Create default settings row for org
-      await supabase.from('org_settings').insert({
-        organization_id: org.id,
-        language: lang,
-        low_stock_threshold: 10,
-        exchange_rates: { USD: 1, EUR: 1.1, UZS: 0.000079 },
+      const { error: rpcErr } = await supabase.rpc('create_organization', {
+        org_name: orgName.trim(),
+        user_lang: lang,
       });
-
-      // Refresh profile in AppContext so _layout navigates to main
+      if (rpcErr) throw rpcErr;
       await refreshProfile();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
@@ -63,24 +41,10 @@ export default function SetupScreen() {
     setLoading(true);
     setError('');
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
-
-      // Verify org exists
-      const { data: org, error: orgErr } = await supabase
-        .from('organizations')
-        .select('id, name')
-        .eq('id', orgCode.trim())
-        .single();
-      if (orgErr || !org) throw new Error('Organization not found. Check the code and try again.');
-
-      // Link user to org as worker
-      const { error: profileErr } = await supabase
-        .from('profiles')
-        .update({ organization_id: org.id, role: 'worker' })
-        .eq('id', user.id);
-      if (profileErr) throw profileErr;
-
+      const { error: rpcErr } = await supabase.rpc('join_organization', {
+        org_id: orgCode.trim(),
+      });
+      if (rpcErr) throw rpcErr;
       await refreshProfile();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');

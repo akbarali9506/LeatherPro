@@ -9,6 +9,8 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import * as ExpoClipboard from 'expo-clipboard';
 import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
@@ -21,8 +23,9 @@ const LANGUAGES: { code: Language; label: string; native: string }[] = [
 ];
 
 export default function SettingsScreen() {
-  const { settings, updateSettings, setLanguage, logout } = useApp();
+  const { settings, updateSettings, setLanguage, logout, orgId, role } = useApp();
   const lang = settings.language;
+  const isDirector = role === 'director';
   const rates = settings.exchangeRates;
 
   const [eurRate, setEurRate] = useState(String(rates.EUR));
@@ -47,6 +50,24 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* Organization code — director only */}
+        {isDirector && orgId && (
+          <View style={[styles.card, Shadow.sm]}>
+            <Text style={styles.cardTitle}>Organization Code</Text>
+            <Text style={styles.orgCodeHint}>Share this code with workers so they can join your organization.</Text>
+            <TouchableOpacity
+              style={styles.orgCodeBox}
+              onPress={() => {
+                ExpoClipboard.setStringAsync(orgId);
+                Alert.alert('', 'Copied to clipboard');
+              }}
+            >
+              <Text style={styles.orgCodeText} numberOfLines={1}>{orgId}</Text>
+              <Ionicons name="copy-outline" size={18} color={Colors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Language */}
         <View style={[styles.card, Shadow.sm]}>
@@ -178,4 +199,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoutText: { color: Colors.error, fontWeight: '700', fontSize: FontSize.md },
+  orgCodeHint: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.md },
+  orgCodeBox: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.background, borderRadius: Radius.md,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
+  },
+  orgCodeText: { flex: 1, fontSize: FontSize.sm, color: Colors.text, fontFamily: 'monospace' },
 });

@@ -1,19 +1,19 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatUSD, toUSD } from '../../utils/currency';
-import { Grade, InventoryItem } from '../../types';
+import { Currency, Grade, InventoryItem } from '../../types';
 
 const GRADES: Grade[] = ['Grade 1', 'Grade 2', 'Grade 3'];
 const GRADE_COLORS = { 'Grade 1': Colors.grade1, 'Grade 2': Colors.grade2, 'Grade 3': Colors.grade3 };
 const GRADE_LIGHT = { 'Grade 1': Colors.grade1Light, 'Grade 2': Colors.grade2Light, 'Grade 3': Colors.grade3Light };
 
 export default function LeatherScreen() {
-  const { inventory, settings, role, updateItemPrice } = useApp();
+  const { inventory, settings, role, updateItemPrice, deleteInventoryItem } = useApp();
   const lang = settings.language;
   const isDirector = role === 'director';
   const rates = settings.exchangeRates;
@@ -21,8 +21,9 @@ export default function LeatherScreen() {
   const [view, setView] = useState<'batch' | 'grade'>('batch');
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [editPrice, setEditPrice] = useState('');
+  const [editCurrency, setEditCurrency] = useState<Currency>('USD');
 
-  const finished = inventory.filter((i) => i.type === 'Finished Leather');
+  const finished = inventory.filter((i) => i.type === 'Finished Leather' && i.qty > 0);
   const totalArea = finished.reduce((s, i) => s + i.qty, 0);
   const totalValue = finished.reduce((s, i) => s + toUSD(i.qty * i.price, i.currency, rates), 0);
 
@@ -40,7 +41,7 @@ export default function LeatherScreen() {
 
   function savePrice() {
     if (!editItem || !editPrice) return;
-    updateItemPrice(editItem.id, parseFloat(editPrice));
+    updateItemPrice(editItem.id, parseFloat(editPrice), editCurrency);
     setEditItem(null);
   }
 
@@ -90,7 +91,8 @@ export default function LeatherScreen() {
                     key={item.id}
                     item={item}
                     isDirector={isDirector}
-                    onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); }}
+                    onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
+                    onDelete={() => deleteInventoryItem(item.id)}
                   />
                 ))}
               </View>
@@ -103,7 +105,8 @@ export default function LeatherScreen() {
                     key={item.id}
                     item={item}
                     isDirector={isDirector}
-                    onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); }}
+                    onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
+                    onDelete={() => deleteInventoryItem(item.id)}
                   />
                 ))}
               </View>
@@ -129,7 +132,8 @@ export default function LeatherScreen() {
                     key={item.id}
                     item={item}
                     isDirector={isDirector}
-                    onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); }}
+                    onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
+                    onDelete={() => deleteInventoryItem(item.id)}
                     showName
                   />
                 ))}
@@ -141,17 +145,30 @@ export default function LeatherScreen() {
 
       {/* Edit price modal */}
       <Modal visible={!!editItem} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>{t(lang, 'editPrice')}: {editItem?.name}</Text>
             <Text style={styles.fieldLabel}>{t(lang, 'price')} / dm²</Text>
-            <TextInput
-              style={styles.input}
-              value={editPrice}
-              onChangeText={setEditPrice}
-              keyboardType="decimal-pad"
-              autoFocus
-            />
+            <View style={styles.priceRow}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={editPrice}
+                onChangeText={setEditPrice}
+                keyboardType="decimal-pad"
+                autoFocus
+              />
+              <View style={styles.currencyRow}>
+                {(['USD', 'UZS'] as Currency[]).map((c) => (
+                  <TouchableOpacity
+                    key={c}
+                    style={[styles.currBtn, editCurrency === c && styles.currBtnActive]}
+                    onPress={() => setEditCurrency(c)}
+                  >
+                    <Text style={[styles.currText, editCurrency === c && styles.currTextActive]}>{c}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditItem(null)}>
                 <Text style={styles.cancelBtnText}>{t(lang, 'cancel')}</Text>
@@ -161,17 +178,37 @@ export default function LeatherScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
 }
 
-function GradeRow({ item, isDirector, onEdit, showName }: {
-  item: InventoryItem; isDirector: boolean; onEdit: () => void; showName?: boolean;
+function GradeRow({ item, isDirector, onEdit, onDelete, showName }: {
+  item: InventoryItem; isDirector: boolean; onEdit: () => void; onDelete: () => void; showName?: boolean;
 }) {
+  const [confirming, setConfirming] = useState(false);
   const color = item.grade ? GRADE_COLORS[item.grade] : Colors.primary;
   const light = item.grade ? GRADE_LIGHT[item.grade] : Colors.primaryLight;
+
+  if (confirming) {
+    return (
+      <View style={styles.gradeRow}>
+        <Text style={styles.confirmQuestion} numberOfLines={1}>
+          {showName ? (item.batchName ?? item.name) : (item.grade ?? item.name)}
+        </Text>
+        <View style={styles.confirmInline}>
+          <TouchableOpacity style={styles.confirmCancelBtn} onPress={() => setConfirming(false)}>
+            <Text style={styles.confirmCancelText}>✕</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.confirmDeleteBtn} onPress={() => { onDelete(); setConfirming(false); }}>
+            <Ionicons name="trash-outline" size={14} color={Colors.surface} />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.gradeRow}>
       {showName ? (
@@ -186,6 +223,11 @@ function GradeRow({ item, isDirector, onEdit, showName }: {
       {isDirector && (
         <TouchableOpacity onPress={onEdit}>
           <Ionicons name="pencil-outline" size={16} color={Colors.primary} />
+        </TouchableOpacity>
+      )}
+      {isDirector && (
+        <TouchableOpacity onPress={() => setConfirming(true)}>
+          <Ionicons name="trash-outline" size={16} color={Colors.error} />
         </TouchableOpacity>
       )}
     </View>
@@ -219,11 +261,22 @@ const styles = StyleSheet.create({
   gradeItemName: { flex: 1, fontSize: FontSize.sm, color: Colors.textSecondary },
   gradeQty: { fontSize: FontSize.sm, color: Colors.textSecondary, flex: 1, textAlign: 'right' },
   gradePrice: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },
+  confirmQuestion: { flex: 1, fontSize: FontSize.sm, color: Colors.textSecondary },
+  confirmInline: { flexDirection: 'row', gap: Spacing.xs },
+  confirmCancelBtn: { paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border },
+  confirmCancelText: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '700' },
+  confirmDeleteBtn: { paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.sm, backgroundColor: Colors.error },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.xl, gap: Spacing.md },
   modalTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   fieldLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
   input: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.md, fontSize: FontSize.md, color: Colors.text },
+  priceRow: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
+  currencyRow: { flexDirection: 'row', gap: 4 },
+  currBtn: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.sm, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border },
+  currBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  currText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.textSecondary },
+  currTextActive: { color: Colors.primary },
   modalBtns: { flexDirection: 'row', gap: Spacing.sm },
   cancelBtn: { flex: 1, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
   cancelBtnText: { color: Colors.textSecondary, fontWeight: '600' },

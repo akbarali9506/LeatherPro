@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -61,98 +62,111 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.langRow}>
-        {LANGUAGES.map((l) => (
-          <TouchableOpacity
-            key={l.code}
-            style={[styles.langBtn, lang === l.code && styles.langBtnActive]}
-            onPress={() => setLanguage(l.code)}
-          >
-            <Text style={[styles.langText, lang === l.code && styles.langTextActive]}>
-              {l.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.kav}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.langRow}>
+            {LANGUAGES.map((l) => (
+              <TouchableOpacity
+                key={l.code}
+                style={[styles.langBtn, lang === l.code && styles.langBtnActive]}
+                onPress={() => setLanguage(l.code)}
+              >
+                <Text style={[styles.langText, lang === l.code && styles.langTextActive]}>
+                  {l.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      <View style={styles.logoArea}>
-        <View style={styles.logoIcon}>
-          <Ionicons name="layers" size={40} color={Colors.surface} />
-        </View>
-        <Text style={styles.appName}>{t(lang, 'appName')}</Text>
-      </View>
+          <View style={styles.logoArea}>
+            <View style={styles.logoIcon}>
+              <Ionicons name="layers" size={40} color={Colors.surface} />
+            </View>
+            <Text style={styles.appName}>{t(lang, 'appName')}</Text>
+          </View>
 
-      <View style={styles.tabRow}>
-        {(['signin', 'signup'] as const).map((tb) => (
-          <TouchableOpacity
-            key={tb}
-            style={[styles.tab, tab === tb && styles.tabActive]}
-            onPress={() => { setTab(tb); setError(''); setInfo(''); }}
-          >
-            <Text style={[styles.tabText, tab === tb && styles.tabTextActive]}>
-              {tb === 'signin' ? t(lang, 'signIn') : t(lang, 'signUp')}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+          <View style={styles.tabRow}>
+            {(['signin', 'signup'] as const).map((tb) => (
+              <TouchableOpacity
+                key={tb}
+                style={[styles.tab, tab === tb && styles.tabActive]}
+                onPress={() => { setTab(tb); setError(''); setInfo(''); }}
+              >
+                <Text style={[styles.tabText, tab === tb && styles.tabTextActive]}>
+                  {tb === 'signin' ? t(lang, 'signIn') : t(lang, 'signUp')}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-      <View style={[styles.formCard, Shadow.sm]}>
-        {tab === 'signup' && (
-          <>
-            <Text style={styles.fieldLabel}>{t(lang, 'fullName')}</Text>
+          <View style={[styles.formCard, Shadow.sm]}>
+            {tab === 'signup' && (
+              <>
+                <Text style={styles.fieldLabel}>{t(lang, 'fullName')}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={fullName}
+                  onChangeText={setFullName}
+                  placeholder={t(lang, 'fullName')}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                />
+              </>
+            )}
+
+            <Text style={styles.fieldLabel}>{t(lang, 'emailAddress')}</Text>
             <TextInput
               style={styles.input}
-              value={fullName}
-              onChangeText={setFullName}
-              placeholder={t(lang, 'fullName')}
-              autoCapitalize="words"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="email@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
               autoCorrect={false}
             />
-          </>
-        )}
 
-        <Text style={styles.fieldLabel}>{t(lang, 'emailAddress')}</Text>
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          placeholder="email@example.com"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
+            <Text style={styles.fieldLabel}>{t(lang, 'password')}</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="••••••••"
+              secureTextEntry
+            />
 
-        <Text style={styles.fieldLabel}>{t(lang, 'password')}</Text>
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="••••••••"
-          secureTextEntry
-        />
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {info ? <Text style={styles.infoText}>{info}</Text> : null}
 
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-        {info ? <Text style={styles.infoText}>{info}</Text> : null}
-
-        <TouchableOpacity
-          style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
-          onPress={tab === 'signin' ? handleSignIn : handleSignUp}
-          disabled={loading}
-        >
-          {loading
-            ? <ActivityIndicator color={Colors.surface} />
-            : <Text style={styles.submitBtnText}>
-                {tab === 'signin' ? t(lang, 'signIn') : t(lang, 'signUp')}
-              </Text>
-          }
-        </TouchableOpacity>
-      </View>
+            <TouchableOpacity
+              style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+              onPress={tab === 'signin' ? handleSignIn : handleSignUp}
+              disabled={loading}
+            >
+              {loading
+                ? <ActivityIndicator color={Colors.surface} />
+                : <Text style={styles.submitBtnText}>
+                    {tab === 'signin' ? t(lang, 'signIn') : t(lang, 'signUp')}
+                  </Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background, alignItems: 'center', paddingHorizontal: Spacing.xl },
+  container: { flex: 1, backgroundColor: Colors.background },
+  kav: { flex: 1 },
+  scroll: { flexGrow: 1, alignItems: 'center', paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
   langRow: { flexDirection: 'row', alignSelf: 'flex-end', marginTop: Spacing.lg, gap: Spacing.sm },
   langBtn: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
   langBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },

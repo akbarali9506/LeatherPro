@@ -23,6 +23,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const [panels, setPanels] = useState({ recentBatches: true, leatherSummary: true, lowStock: true });
   const [showCustomize, setShowCustomize] = useState(false);
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
 
   const rates = settings.exchangeRates;
   const pendingSales = sales.filter((s) => s.needsPricing);
@@ -43,8 +44,8 @@ export default function DashboardScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Price review banner */}
-        {pendingReviews.map((review) => (
+        {/* Price review banner — director only */}
+        {isDirector && pendingReviews.map((review) => (
           <View key={review.itemId} style={styles.reviewBanner}>
             <Text style={styles.reviewTitle}>{t(lang, 'priceReview')}: {review.itemName}</Text>
             <View style={styles.reviewPrices}>
@@ -88,11 +89,19 @@ export default function DashboardScreen() {
           {isDirector && <StatCard label={t(lang, 'inventoryValue')} value={formatUSD(inventoryValue)} icon="cube" color={Colors.primary} />}
         </View>
 
-        {/* Quick action */}
-        <TouchableOpacity style={styles.newBatchBtn} onPress={() => router.push('/(main)/batches')}>
-          <Ionicons name="add-circle" size={20} color={Colors.surface} />
-          <Text style={styles.newBatchText}>{t(lang, 'startNewBatch')}</Text>
-        </TouchableOpacity>
+        {/* Quick actions */}
+        <View style={styles.quickRow}>
+          <TouchableOpacity style={[styles.newBatchBtn, { flex: 1 }]} onPress={() => router.push('/(main)/batches')}>
+            <Ionicons name="add-circle" size={20} color={Colors.surface} />
+            <Text style={styles.newBatchText}>{t(lang, 'startNewBatch')}</Text>
+          </TouchableOpacity>
+          {isDirector && (
+            <TouchableOpacity style={styles.reportsBtn} onPress={() => router.push('/(main)/reports')}>
+              <Ionicons name="bar-chart-outline" size={20} color={Colors.primary} />
+              <Text style={styles.reportsBtnText}>{t(lang, 'reports')}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
         {/* Customize button */}
         <TouchableOpacity style={styles.customizeBtn} onPress={() => setShowCustomize(true)}>
@@ -157,10 +166,24 @@ export default function DashboardScreen() {
         )}
 
         {/* Logout */}
-        <TouchableOpacity style={styles.logoutBtn} onPress={logout}>
-          <Ionicons name="log-out-outline" size={18} color={Colors.error} />
-          <Text style={styles.logoutText}>{t(lang, 'logout')}</Text>
-        </TouchableOpacity>
+        {logoutConfirm ? (
+          <View style={styles.logoutConfirmCard}>
+            <Text style={styles.logoutConfirmText}>{t(lang, 'logoutConfirm')}</Text>
+            <View style={styles.logoutConfirmBtns}>
+              <TouchableOpacity style={styles.logoutCancelBtn} onPress={() => setLogoutConfirm(false)}>
+                <Text style={styles.logoutCancelText}>{t(lang, 'no')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.logoutDoBtn} onPress={logout}>
+                <Text style={styles.logoutDoText}>{t(lang, 'logout')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.logoutBtn} onPress={() => setLogoutConfirm(true)}>
+            <Ionicons name="log-out-outline" size={18} color={Colors.error} />
+            <Text style={styles.logoutText}>{t(lang, 'logout')}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Customize modal */}
@@ -228,6 +251,7 @@ const styles = StyleSheet.create({
   statIcon: { width: 40, height: 40, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
   statValue: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   statLabel: { fontSize: FontSize.xs, color: Colors.textSecondary },
+  quickRow: { flexDirection: 'row', gap: Spacing.sm },
   newBatchBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -238,6 +262,8 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   newBatchText: { color: Colors.surface, fontWeight: '700', fontSize: FontSize.md },
+  reportsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, borderRadius: Radius.md, padding: Spacing.md, borderWidth: 1.5, borderColor: Colors.primary, backgroundColor: Colors.surface },
+  reportsBtnText: { color: Colors.primary, fontWeight: '700', fontSize: FontSize.md },
   customizeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -270,6 +296,13 @@ const styles = StyleSheet.create({
   emptyText: { color: Colors.textMuted, fontSize: FontSize.sm, textAlign: 'center', paddingVertical: Spacing.sm },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.sm, padding: Spacing.md, marginTop: Spacing.sm },
   logoutText: { color: Colors.error, fontWeight: '600', fontSize: FontSize.md },
+  logoutConfirmCard: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.lg, borderWidth: 1.5, borderColor: Colors.error, gap: Spacing.md, marginTop: Spacing.sm },
+  logoutConfirmText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text, textAlign: 'center' },
+  logoutConfirmBtns: { flexDirection: 'row', gap: Spacing.sm },
+  logoutCancelBtn: { flex: 1, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
+  logoutCancelText: { color: Colors.textSecondary, fontWeight: '600', fontSize: FontSize.md },
+  logoutDoBtn: { flex: 1, padding: Spacing.md, borderRadius: Radius.md, backgroundColor: Colors.error, alignItems: 'center' },
+  logoutDoText: { color: Colors.surface, fontWeight: '700', fontSize: FontSize.md },
   pendingBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.warningLight, borderRadius: Radius.lg, padding: Spacing.md, borderWidth: 1, borderColor: Colors.warning },
   pendingBannerText: { flex: 1, fontSize: FontSize.sm, color: Colors.warning, fontWeight: '600' },
   reviewBanner: { backgroundColor: Colors.warningLight, borderRadius: Radius.lg, padding: Spacing.lg, borderWidth: 1, borderColor: Colors.warning },

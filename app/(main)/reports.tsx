@@ -1,15 +1,25 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatUSD, toUSD } from '../../utils/currency';
 
 export default function ReportsScreen() {
-  const { batches, sales, settings } = useApp();
+  const { batches, sales, settings, role } = useApp();
   const lang = settings.language;
+  const router = useRouter();
   const [view, setView] = useState<'overview' | 'batches'>('overview');
+
+  useEffect(() => {
+    if (role !== null && role !== 'director') {
+      router.replace('/(main)/dashboard');
+    }
+  }, [role, router]);
+
+  if (role !== 'director') return null;
 
   const rates = settings.exchangeRates;
   const totalRevenue = sales

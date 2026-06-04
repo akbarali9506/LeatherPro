@@ -277,6 +277,30 @@ export function pushBatchDeleted(batchId: string, orgId: string) {
     .then(({ error }) => { if (error) console.warn('batch delete push:', error.message); });
 }
 
+export function pushInventoryBatchDeleted(batchId: string, orgId: string) {
+  supabase.from('inventory')
+    .delete()
+    .eq('batch_id', batchId)
+    .eq('organization_id', orgId)
+    .then(({ error }) => { if (error) console.warn('inventory batch delete push:', error.message); });
+}
+
+export function pushSalesBatchDeleted(batchId: string, orgId: string) {
+  supabase.from('sales')
+    .delete()
+    .eq('batch_id', batchId)
+    .eq('organization_id', orgId)
+    .then(({ error }) => { if (error) console.warn('sales batch delete push:', error.message); });
+}
+
+export function pushFinishedLeatherCleared(orgId: string) {
+  supabase.from('inventory')
+    .delete()
+    .eq('type', 'Finished Leather')
+    .eq('organization_id', orgId)
+    .then(({ error }) => { if (error) console.warn('leather clear push:', error.message); });
+}
+
 export function pushSales(sales: Sale[], orgId: string) {
   supabase.from('sales')
     .upsert(sales.map((s) => saleToDb(s, orgId)))

@@ -41,6 +41,7 @@ export default {
   editPrice: 'Edit Price',
   deleteItem: 'Delete Item',
   lowStock: 'Low Stock',
+  outOfStock: 'Out of Stock · Refill Needed',
   addFinishedLeather: 'Add Finished Leather',
   itemName: 'Item Name',
   itemType: 'Item Type',
@@ -67,7 +68,7 @@ export default {
   summary: 'Summary',
   next: 'Next',
   back: 'Back',
-  save: 'Save Batch',
+  save: 'Save',
   cancel: 'Cancel',
   delete: 'Delete',
   addCost: 'Add Cost',
@@ -75,6 +76,7 @@ export default {
   amount: 'Amount',
   qtyUsed: 'Qty Used',
   qtyAvailable: 'Available',
+  enterQty: 'Enter quantity',
   batchStatus: 'Batch Status',
   finished: 'Finished',
   inProgress: 'In Progress',
@@ -160,6 +162,7 @@ export default {
   noPurchaseHistory: 'No purchase history',
   outstanding: 'Outstanding',
   totalOwed: 'Total Owed',
+  markAsPaid: 'Mark as Paid',
 
   // Payment
   paymentStatus: 'Payment Status',
@@ -202,4 +205,7 @@ export default {
   syncing: 'Syncing...',
   syncError: 'Sync failed — working offline',
   emailConfirmNote: 'Check your email to confirm your account, then sign in.',
+  clearAll: 'Clear All',
+  confirmClearLeather: 'Clear all finished leather? This cannot be undone.',
+  incompleteBuyersBanner: 'Some buyers are missing contact details. Tap Edit to fill them in.',
 };

@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, Modal,
+  TextInput, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
@@ -12,9 +13,19 @@ import { formatUSD, toUSD } from '../../utils/currency';
 import { Buyer } from '../../types';
 
 export default function BuyersScreen() {
-  const { buyers, sales, inventory, settings, addBuyer, updateBuyer, deleteBuyer } = useApp();
+  const { buyers, sales, inventory, settings, role, addBuyer, updateBuyer, deleteBuyer, updateSalePayment } = useApp();
   const lang = settings.language;
   const rates = settings.exchangeRates;
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    if (role !== null && role !== 'director') {
+      router.replace('/(main)/dashboard');
+    }
+  }, [role, router]);
+
+  if (role !== 'director') return null;
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -86,9 +97,17 @@ export default function BuyersScreen() {
 
   const canSave = !!(formName.trim() && formCompany.trim() && formPhone.trim());
 
+  const incompleteBuyers = buyers.filter((b) => !b.company && !b.phone);
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      {incompleteBuyers.length > 0 && (
+        <View style={styles.incompleteBanner}>
+          <Ionicons name="information-circle-outline" size={16} color={Colors.warning} />
+          <Text style={styles.incompleteBannerText}>{t(lang, 'incompleteBuyersBanner')}</Text>
+        </View>
+      )}
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         {buyers.length === 0 && (
           <Text style={styles.emptyText}>{t(lang, 'noBuyers')}</Text>
         )}
@@ -112,8 +131,11 @@ export default function BuyersScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.buyerName}>{buyer.name}</Text>
-                  <Text style={styles.buyerCompany}>{buyer.company}</Text>
+                  <Text style={styles.buyerCompany}>{buyer.company || '—'}</Text>
                 </View>
+                {!buyer.company && !buyer.phone && (
+                  <Ionicons name="alert-circle-outline" size={16} color={Colors.warning} />
+                )}
                 {outstanding > 0 && (
                   <View style={styles.outstandingBadge}>
                     <Text style={styles.outstandingBadgeText}>{t(lang, 'outstanding')}</Text>
@@ -195,6 +217,14 @@ export default function BuyersScreen() {
                                       : t(lang, 'paid')}
                                   </Text>
                                 </View>
+                                {sale.paymentStatus === 'partial' && (
+                                  <TouchableOpacity
+                                    style={styles.markPaidBtn}
+                                    onPress={() => updateSalePayment(sale.id, 'paid')}
+                                  >
+                                    <Text style={styles.markPaidText}>{t(lang, 'markAsPaid')}</Text>
+                                  </TouchableOpacity>
+                                )}
                               </>
                             )}
                           </View>
@@ -248,14 +278,14 @@ export default function BuyersScreen() {
         })}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={openAdd}>
+      <TouchableOpacity style={[styles.fab, { bottom: Spacing.xl + insets.bottom }]} onPress={openAdd}>
         <Ionicons name="add" size={22} color={Colors.surface} />
         <Text style={styles.fabText}>{t(lang, 'addBuyer')}</Text>
       </TouchableOpacity>
 
       {/* Add / Edit Modal */}
       <Modal visible={showForm} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <ScrollView
             style={styles.modalSheet}
             contentContainerStyle={styles.modalContent}
@@ -323,7 +353,7 @@ export default function BuyersScreen() {
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -331,8 +361,11 @@ export default function BuyersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  scroll: { padding: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
+  scroll: { padding: Spacing.lg, gap: Spacing.sm },
   emptyText: { textAlign: 'center', color: Colors.textMuted, marginTop: Spacing.xxl },
+
+  incompleteBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, margin: Spacing.lg, marginBottom: 0, padding: Spacing.md, backgroundColor: Colors.warningLight, borderRadius: Radius.md },
+  incompleteBannerText: { flex: 1, fontSize: FontSize.sm, color: Colors.warning, fontWeight: '600' },
 
   buyerCard: { backgroundColor: Colors.surface, borderRadius: Radius.lg, overflow: 'hidden' },
   buyerHeader: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, gap: Spacing.md },
@@ -365,6 +398,8 @@ const styles = StyleSheet.create({
   payBadgePartial: { backgroundColor: Colors.warningLight },
   payBadgeText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.success },
   payBadgeTextPartial: { color: Colors.warning },
+  markPaidBtn: { paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.success, marginTop: 2 },
+  markPaidText: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.success },
 
   actionRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs },
   editBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, paddingVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.primary },

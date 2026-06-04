@@ -6,7 +6,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   TextInput,
-  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,23 +27,26 @@ export default function SettingsScreen() {
   const isDirector = role === 'director';
   const rates = settings.exchangeRates;
 
-  const [eurRate, setEurRate] = useState(String(rates.EUR));
   const [uzsRate, setUzsRate] = useState(String(rates.UZS));
   const [threshold, setThreshold] = useState(String(settings.lowStockThreshold));
+  const [savedSection, setSavedSection] = useState<null | 'rates' | 'threshold'>(null);
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   function saveRates() {
-    const EUR = parseFloat(eurRate);
     const UZS = parseFloat(uzsRate);
-    if (isNaN(EUR) || isNaN(UZS)) return;
-    updateSettings({ exchangeRates: { USD: 1, EUR, UZS } });
-    Alert.alert('', 'Saved');
+    if (isNaN(UZS)) return;
+    updateSettings({ exchangeRates: { USD: 1, EUR: rates.EUR, UZS } });
+    setSavedSection('rates');
+    setTimeout(() => setSavedSection(null), 2000);
   }
 
   function saveThreshold() {
     const val = parseInt(threshold, 10);
     if (isNaN(val)) return;
     updateSettings({ lowStockThreshold: val });
-    Alert.alert('', 'Saved');
+    setSavedSection('threshold');
+    setTimeout(() => setSavedSection(null), 2000);
   }
 
   return (
@@ -54,17 +56,22 @@ export default function SettingsScreen() {
         {/* Organization code — director only */}
         {isDirector && orgId && (
           <View style={[styles.card, Shadow.sm]}>
-            <Text style={styles.cardTitle}>Organization Code</Text>
-            <Text style={styles.orgCodeHint}>Share this code with workers so they can join your organization.</Text>
+            <Text style={styles.cardTitle}>{t(lang, 'orgCode')}</Text>
+            <Text style={styles.orgCodeHint}>{t(lang, 'orgCodeHint')}</Text>
             <TouchableOpacity
               style={styles.orgCodeBox}
-              onPress={() => {
-                ExpoClipboard.setStringAsync(orgId);
-                Alert.alert('', 'Copied to clipboard');
+              onPress={async () => {
+                await ExpoClipboard.setStringAsync(orgId);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
               }}
             >
               <Text style={styles.orgCodeText} numberOfLines={1}>{orgId}</Text>
-              <Ionicons name="copy-outline" size={18} color={Colors.primary} />
+              <Ionicons
+                name={copied ? 'checkmark-circle' : 'copy-outline'}
+                size={18}
+                color={copied ? Colors.success : Colors.primary}
+              />
             </TouchableOpacity>
           </View>
         )}
@@ -95,16 +102,6 @@ export default function SettingsScreen() {
             <Text style={styles.rateLabel}>1.00</Text>
           </View>
           <View style={styles.rateRow}>
-            <Text style={styles.rateLabel}>{t(lang, 'eurRate')}</Text>
-            <TextInput
-              style={styles.rateInput}
-              value={eurRate}
-              onChangeText={setEurRate}
-              keyboardType="decimal-pad"
-              placeholder="1.08"
-            />
-          </View>
-          <View style={styles.rateRow}>
             <Text style={styles.rateLabel}>{t(lang, 'uzsRate')}</Text>
             <TextInput
               style={styles.rateInput}
@@ -115,7 +112,14 @@ export default function SettingsScreen() {
             />
           </View>
           <TouchableOpacity style={styles.saveBtn} onPress={saveRates}>
-            <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+            {savedSection === 'rates' ? (
+              <View style={styles.savedRow}>
+                <Ionicons name="checkmark-circle" size={16} color={Colors.surface} />
+                <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+              </View>
+            ) : (
+              <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -132,22 +136,37 @@ export default function SettingsScreen() {
             />
           </View>
           <TouchableOpacity style={styles.saveBtn} onPress={saveThreshold}>
-            <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+            {savedSection === 'threshold' ? (
+              <View style={styles.savedRow}>
+                <Ionicons name="checkmark-circle" size={16} color={Colors.surface} />
+                <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+              </View>
+            ) : (
+              <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+            )}
           </TouchableOpacity>
         </View>
 
         {/* Logout */}
-        <TouchableOpacity
-          style={styles.logoutBtn}
-          onPress={() =>
-            Alert.alert(t(lang, 'logout'), t(lang, 'logoutConfirm'), [
-              { text: t(lang, 'no'), style: 'cancel' },
-              { text: t(lang, 'yes'), style: 'destructive', onPress: logout },
-            ])
-          }
-        >
-          <Text style={styles.logoutText}>{t(lang, 'logout')}</Text>
-        </TouchableOpacity>
+        {logoutConfirm ? (
+          <View style={[styles.card, Shadow.sm, styles.confirmCard]}>
+            <Text style={styles.confirmText}>{t(lang, 'logoutConfirm')}</Text>
+            <View style={styles.confirmRow}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setLogoutConfirm(false)}>
+                <Text style={styles.cancelBtnText}>{t(lang, 'no')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.logoutConfirmBtn} onPress={logout}>
+                <Ionicons name="log-out-outline" size={16} color={Colors.surface} />
+                <Text style={styles.logoutConfirmText}>{t(lang, 'logout')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.logoutBtn} onPress={() => setLogoutConfirm(true)}>
+            <Ionicons name="log-out-outline" size={18} color={Colors.error} />
+            <Text style={styles.logoutText}>{t(lang, 'logout')}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -191,12 +210,16 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   saveBtnText: { color: Colors.surface, fontWeight: '700', fontSize: FontSize.md },
+  savedRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   logoutBtn: {
     borderWidth: 1.5,
     borderColor: Colors.error,
     borderRadius: Radius.md,
     padding: Spacing.md,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: Spacing.sm,
   },
   logoutText: { color: Colors.error, fontWeight: '700', fontSize: FontSize.md },
   orgCodeHint: { fontSize: FontSize.sm, color: Colors.textSecondary, marginBottom: Spacing.md },
@@ -207,4 +230,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, paddingVertical: Spacing.md,
   },
   orgCodeText: { flex: 1, fontSize: FontSize.sm, color: Colors.text, fontFamily: 'monospace' },
+  confirmCard: { borderWidth: 1.5, borderColor: Colors.error },
+  confirmText: { fontSize: FontSize.md, color: Colors.text, marginBottom: Spacing.md, fontWeight: '600' },
+  confirmRow: { flexDirection: 'row', gap: Spacing.sm },
+  cancelBtn: { flex: 1, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
+  cancelBtnText: { color: Colors.textSecondary, fontWeight: '600', fontSize: FontSize.md },
+  logoutConfirmBtn: {
+    flex: 1, padding: Spacing.md, borderRadius: Radius.md,
+    backgroundColor: Colors.error, alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'center', gap: Spacing.sm,
+  },
+  logoutConfirmText: { color: Colors.surface, fontWeight: '700', fontSize: FontSize.md },
 });

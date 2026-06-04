@@ -1,26 +1,29 @@
 import { useState } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  TextInput, Modal,
+  TextInput, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatUSD, toUSD } from '../../utils/currency';
 import { Currency, InventoryItem, PaymentStatus, Sale, SaleType } from '../../types';
 
-const CURRENCIES: Currency[] = ['USD', 'EUR', 'UZS'];
+const CURRENCIES: Currency[] = ['USD', 'UZS'];
 type SaleFilter = 'all' | SaleType;
 
 export default function SalesScreen() {
   const {
     inventory, sales, settings, role,
-    addSale, deleteSale, updateSalePrice,
+    addSale, deleteSale, updateSalePrice, updateSalePayment,
   } = useApp();
   const lang = settings.language;
   const isDirector = role === 'director';
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   // list state
   const [typeFilter, setTypeFilter] = useState<SaleFilter>('all');
@@ -43,6 +46,11 @@ export default function SalesScreen() {
   const [setPriceSale, setSetPriceSale] = useState<Sale | null>(null);
   const [setPriceVal, setSetPriceVal] = useState('');
   const [setPriceCurrency, setSetPriceCurrency] = useState<Currency>('USD');
+
+  // edit payment modal (director only)
+  const [editPaySale, setEditPaySale] = useState<Sale | null>(null);
+  const [editPayStatus, setEditPayStatus] = useState<PaymentStatus>('paid');
+  const [editPaidAmount, setEditPaidAmount] = useState('');
 
   const finishedLeather = inventory.filter((i) => i.type === 'Finished Leather' && i.qty > 0);
   const chemicals = inventory.filter((i) => i.type === 'Chemical' && i.qty > 0);
@@ -107,6 +115,22 @@ export default function SalesScreen() {
     setSetPriceVal('');
   }
 
+  function openEditPayment(sale: Sale) {
+    setEditPaySale(sale);
+    setEditPayStatus(sale.paymentStatus ?? 'paid');
+    setEditPaidAmount(sale.paidAmount ? String(sale.paidAmount) : '');
+  }
+
+  function handleEditPayment() {
+    if (!editPaySale) return;
+    updateSalePayment(
+      editPaySale.id,
+      editPayStatus,
+      editPayStatus === 'partial' && editPaidAmount ? parseFloat(editPaidAmount) : undefined,
+    );
+    setEditPaySale(null);
+  }
+
   const canSave = !!(selectedItem && qty && buyer.trim() && (!isDirector || price));
   const totalPreview =
     isDirector && qty && price
@@ -132,6 +156,15 @@ export default function SalesScreen() {
             {pendingPricingSales.length} {t(lang, 'pendingPricing')} — {t(lang, 'setPrice')}
           </Text>
           <Ionicons name="chevron-forward" size={14} color={Colors.warning} />
+        </TouchableOpacity>
+      )}
+
+      {/* Buyers link — director only */}
+      {isDirector && (
+        <TouchableOpacity style={styles.buyersLink} onPress={() => router.push('/(main)/buyers')}>
+          <Ionicons name="people-outline" size={16} color={Colors.primary} />
+          <Text style={styles.buyersLinkText}>{t(lang, 'buyers')}</Text>
+          <Ionicons name="chevron-forward" size={14} color={Colors.primary} />
         </TouchableOpacity>
       )}
 
@@ -162,7 +195,7 @@ export default function SalesScreen() {
         </View>
       )}
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         {filteredSales.length === 0 && (
           <Text style={styles.emptyText}>{t(lang, 'noSales')}</Text>
         )}
@@ -185,7 +218,7 @@ export default function SalesScreen() {
                   </View>
                   <Text style={styles.saleDate}>{sale.date} · {sale.buyer}</Text>
                 </View>
-                {!isConfirming && (
+                {!isConfirming && isDirector && (
                   <TouchableOpacity onPress={() => setConfirmDeleteId(sale.id)}>
                     <Ionicons name="trash-outline" size={18} color={Colors.error} />
                   </TouchableOpacity>
@@ -250,6 +283,13 @@ export default function SalesScreen() {
                           )}
                         </Text>
                       )}
+                      <TouchableOpacity
+                        style={styles.editPayBtn}
+                        onPress={() => openEditPayment(sale)}
+                      >
+                        <Ionicons name="pencil-outline" size={13} color={Colors.primary} />
+                        <Text style={styles.editPayBtnText}>{t(lang, 'edit')}</Text>
+                      </TouchableOpacity>
                     </View>
                   )}
                 </>
@@ -283,14 +323,14 @@ export default function SalesScreen() {
         })}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => setShowNewSale(true)}>
+      <TouchableOpacity style={[styles.fab, { bottom: Spacing.xl + insets.bottom }]} onPress={() => setShowNewSale(true)}>
         <Ionicons name="add" size={22} color={Colors.surface} />
         <Text style={styles.fabText}>{t(lang, 'newSale')}</Text>
       </TouchableOpacity>
 
       {/* ── New Sale Modal ── */}
       <Modal visible={showNewSale} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
           <ScrollView
             style={styles.modalSheet}
             contentContainerStyle={styles.modalContent}
@@ -320,7 +360,7 @@ export default function SalesScreen() {
             <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowItemPicker(true)}>
               <Text style={selectedItem ? styles.pickerSelected : styles.pickerPlaceholder} numberOfLines={1}>
                 {selectedItem
-                  ? `${selectedItem.name} (${selectedItem.qty} ${selectedItem.unit} avail.)`
+                  ? `${selectedItem.name} (${selectedItem.qty} ${selectedItem.unit})`
                   : t(lang, 'selectLeather')}
               </Text>
               <Ionicons name="chevron-down" size={16} color={Colors.textMuted} />
@@ -439,7 +479,7 @@ export default function SalesScreen() {
               </TouchableOpacity>
             </View>
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* ── Item Picker Modal ── */}
@@ -476,6 +516,60 @@ export default function SalesScreen() {
             <TouchableOpacity style={styles.saveBtn} onPress={() => setShowItemPicker(false)}>
               <Text style={styles.saveBtnText}>{t(lang, 'close')}</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Edit Payment Modal (director) ── */}
+      <Modal visible={!!editPaySale} transparent animationType="fade">
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <Text style={styles.modalTitle}>{t(lang, 'paymentStatus')}</Text>
+            {editPaySale && (() => {
+              const saleItem = inventory.find((i) => i.id === editPaySale.inventoryId);
+              return (
+                <>
+                  <Text style={styles.pickerItemName}>{saleItem?.name ?? editPaySale.inventoryId}</Text>
+                  <Text style={styles.pickerItemDetail}>
+                    {editPaySale.buyer} · {editPaySale.date}
+                  </Text>
+                  <View style={styles.segmentRow}>
+                    {(['paid', 'partial'] as PaymentStatus[]).map((ps) => (
+                      <TouchableOpacity
+                        key={ps}
+                        style={[styles.segmentBtn, editPayStatus === ps && styles.segmentBtnActive]}
+                        onPress={() => setEditPayStatus(ps)}
+                      >
+                        <Text style={[styles.segmentText, editPayStatus === ps && styles.segmentTextActive]}>
+                          {ps === 'paid' ? t(lang, 'paid') : t(lang, 'partial')}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {editPayStatus === 'partial' && (
+                    <>
+                      <Text style={styles.fieldLabel}>{t(lang, 'paidAmount')} ({editPaySale.currency})</Text>
+                      <TextInput
+                        style={styles.input}
+                        value={editPaidAmount}
+                        onChangeText={setEditPaidAmount}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        autoFocus
+                      />
+                    </>
+                  )}
+                </>
+              );
+            })()}
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditPaySale(null)}>
+                <Text style={styles.cancelBtnText}>{t(lang, 'cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleEditPayment}>
+                <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -521,7 +615,7 @@ export default function SalesScreen() {
 
                   {pendingPricingSales.length > 1 && (
                     <Text style={styles.pendingMoreText}>
-                      +{pendingPricingSales.length - 1} more pending
+                      +{pendingPricingSales.length - 1} {t(lang, 'pendingPricing')}
                     </Text>
                   )}
                 </>
@@ -559,6 +653,9 @@ const styles = StyleSheet.create({
   },
   pendingBannerText: { flex: 1, fontSize: FontSize.sm, color: Colors.warning, fontWeight: '600' },
 
+  buyersLink: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  buyersLinkText: { flex: 1, fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
+
   tabRow: { flexDirection: 'row', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, gap: Spacing.sm },
   tab: { flex: 1, paddingVertical: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
   tabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
@@ -569,7 +666,7 @@ const styles = StyleSheet.create({
   revenueLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
   revenueValue: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.success },
 
-  scroll: { padding: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
+  scroll: { padding: Spacing.lg, gap: Spacing.sm },
   emptyText: { textAlign: 'center', color: Colors.textMuted, marginTop: Spacing.xxl },
 
   saleCard: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.lg, gap: Spacing.sm },
@@ -646,4 +743,6 @@ const styles = StyleSheet.create({
   pickerItemName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
   pickerItemDetail: { fontSize: FontSize.sm, color: Colors.textSecondary },
   pendingMoreText: { fontSize: FontSize.xs, color: Colors.textMuted, textAlign: 'center', fontStyle: 'italic' },
+  editPayBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.primary, marginLeft: 'auto' },
+  editPayBtnText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.primary },
 });

@@ -41,6 +41,7 @@ export default {
   editPrice: 'Изменить цену',
   deleteItem: 'Удалить товар',
   lowStock: 'Низкий запас',
+  outOfStock: 'Закончился · Нужно пополнить',
   addFinishedLeather: 'Добавить готовую кожу',
   itemName: 'Название',
   itemType: 'Тип',
@@ -75,6 +76,7 @@ export default {
   amount: 'Сумма',
   qtyUsed: 'Использовано',
   qtyAvailable: 'Доступно',
+  enterQty: 'Введите количество',
   batchStatus: 'Статус партии',
   finished: 'Завершена',
   inProgress: 'В процессе',
@@ -159,6 +161,7 @@ export default {
   noPurchaseHistory: 'История покупок пуста',
   outstanding: 'Задолженность',
   totalOwed: 'Итого к оплате',
+  markAsPaid: 'Отметить как оплачено',
 
   paymentStatus: 'Статус оплаты',
   paid: 'Оплачено полностью',
@@ -196,4 +199,7 @@ export default {
   syncing: 'Синхронизация...',
   syncError: 'Ошибка синхронизации — работает офлайн',
   emailConfirmNote: 'Проверьте email для подтверждения аккаунта, затем войдите.',
+  clearAll: 'Очистить всё',
+  confirmClearLeather: 'Очистить всю готовую кожу? Это действие нельзя отменить.',
+  incompleteBuyersBanner: 'У некоторых покупателей отсутствуют контактные данные. Нажмите Редактировать для заполнения.',
 };

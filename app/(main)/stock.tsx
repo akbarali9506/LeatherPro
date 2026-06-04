@@ -7,22 +7,26 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatUSD, toUSD } from '../../utils/currency';
-import { Currency, InventoryItem, ItemType } from '../../types';
+import { Currency, InventoryItem, ItemType, Language } from '../../types';
 
-const CURRENCIES: Currency[] = ['USD', 'EUR', 'UZS'];
+const CURRENCIES: Currency[] = ['USD', 'UZS'];
 
 export default function StockScreen() {
   const { inventory, settings, role, addInventoryItem, addStock, updateItemPrice, updateItemUnit, deleteInventoryItem } = useApp();
   const lang = settings.language;
   const isDirector = role === 'director';
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -56,7 +60,7 @@ export default function StockScreen() {
     setFormQty('');
     setFormPrice(item?.price ? String(item.price) : '');
     setFormCurrency(item?.currency ?? 'USD');
-    setFormType('Chemical');
+    setFormType(item?.type === 'Wet Blue' ? 'Wet Blue' : 'Chemical');
     setModal(type);
   }
 
@@ -89,7 +93,7 @@ export default function StockScreen() {
 
   function handleEditPrice() {
     if (!selectedItem || !formPrice) return;
-    updateItemPrice(selectedItem.id, parseFloat(formPrice));
+    updateItemPrice(selectedItem.id, parseFloat(formPrice), formCurrency);
     setModal(null);
   }
 
@@ -107,12 +111,6 @@ export default function StockScreen() {
     setModal(null);
   }
 
-  function confirmDelete(item: InventoryItem) {
-    Alert.alert(t(lang, 'confirm'), t(lang, 'confirmDelete'), [
-      { text: t(lang, 'no'), style: 'cancel' },
-      { text: t(lang, 'yes'), style: 'destructive', onPress: () => deleteInventoryItem(item.id) },
-    ]);
-  }
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -127,7 +125,7 @@ export default function StockScreen() {
         />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         {/* Summary */}
         <View style={styles.summaryRow}>
           <View style={[styles.summaryCard, Shadow.sm]}>
@@ -143,10 +141,21 @@ export default function StockScreen() {
               <Text style={styles.summaryNum}>
                 {formatUSD(inventory.filter(i => i.type !== 'Finished Leather').reduce((s, i) => s + toUSD(i.qty * i.price, i.currency, settings.exchangeRates), 0))}
               </Text>
-              <Text style={styles.summaryLabel}>Value</Text>
+              <Text style={styles.summaryLabel}>{t(lang, 'inventoryValue')}</Text>
             </View>
           )}
         </View>
+
+        {/* Leather Warehouse link */}
+        <TouchableOpacity style={[styles.leatherLink, Shadow.sm]} onPress={() => router.push('/(main)/leather')}>
+          <Ionicons name="layers-outline" size={20} color={Colors.primary} />
+          <Text style={styles.leatherLinkText}>{t(lang, 'leather')}</Text>
+          <View style={{ flex: 1 }} />
+          <Text style={styles.leatherLinkCount}>
+            {inventory.filter((i) => i.type === 'Finished Leather' && i.qty > 0).length} items
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={Colors.textMuted} />
+        </TouchableOpacity>
 
         {/* Section: Chemicals */}
         {chemicals.length > 0 && (
@@ -157,14 +166,15 @@ export default function StockScreen() {
             key={item.id}
             item={item}
             isExpanded={expandedId === item.id}
-            isLow={item.qty <= threshold}
+            isEmpty={item.qty === 0}
+            isLow={item.qty > 0 && item.qty <= threshold}
             isDirector={isDirector}
             lang={lang}
             onPress={() => setExpandedId(expandedId === item.id ? null : item.id)}
             onAddStock={() => openModal('addStock', item)}
             onEditUnit={() => openModal('editUnit', item)}
             onEditPrice={() => openModal('editPrice', item)}
-            onDelete={() => confirmDelete(item)}
+            onDelete={() => deleteInventoryItem(item.id)}
           />
         ))}
 
@@ -177,14 +187,15 @@ export default function StockScreen() {
             key={item.id}
             item={item}
             isExpanded={expandedId === item.id}
-            isLow={item.qty <= threshold}
+            isEmpty={item.qty === 0}
+            isLow={item.qty > 0 && item.qty <= threshold}
             isDirector={isDirector}
             lang={lang}
             onPress={() => setExpandedId(expandedId === item.id ? null : item.id)}
             onAddStock={() => openModal('addStock', item)}
             onEditUnit={() => openModal('editUnit', item)}
             onEditPrice={() => openModal('editPrice', item)}
-            onDelete={() => confirmDelete(item)}
+            onDelete={() => deleteInventoryItem(item.id)}
           />
         ))}
 
@@ -194,7 +205,7 @@ export default function StockScreen() {
       </ScrollView>
 
       {/* FAB row */}
-      <View style={styles.fabRow}>
+      <View style={[styles.fabRow, { bottom: Spacing.xl + insets.bottom }]}>
         <TouchableOpacity style={styles.fabSecondary} onPress={() => openModal('addLeather')}>
           <Ionicons name="layers-outline" size={18} color={Colors.primary} />
           <Text style={styles.fabSecondaryText}>{t(lang, 'addFinishedLeather')}</Text>
@@ -222,7 +233,10 @@ export default function StockScreen() {
             <TouchableOpacity
               key={type}
               style={[styles.segment, formType === type && styles.segmentActive]}
-              onPress={() => setFormType(type)}
+              onPress={() => {
+                setFormType(type);
+                setFormUnit(type === 'Wet Blue' ? 'pcs' : 'kg');
+              }}
             >
               <Text style={[styles.segmentText, formType === type && styles.segmentTextActive]}>{type}</Text>
             </TouchableOpacity>
@@ -288,7 +302,10 @@ export default function StockScreen() {
         lang={lang}
       >
         <FieldLabel label={t(lang, 'price')} />
-        <TextInput style={styles.input} value={formPrice} onChangeText={setFormPrice} keyboardType="decimal-pad" autoFocus />
+        <View style={styles.row}>
+          <TextInput style={[styles.input, { flex: 1 }]} value={formPrice} onChangeText={setFormPrice} keyboardType="decimal-pad" autoFocus />
+          <CurrencyPicker value={formCurrency} onChange={setFormCurrency} />
+        </View>
       </FormModal>
 
       {/* Add Finished Leather Modal */}
@@ -328,25 +345,37 @@ function SectionHeader({ icon, title }: { icon: string; title: string }) {
 }
 
 function ItemCard({
-  item, isExpanded, isLow, isDirector, lang,
+  item, isExpanded, isEmpty, isLow, isDirector, lang,
   onPress, onAddStock, onEditUnit, onEditPrice, onDelete,
 }: {
-  item: InventoryItem; isExpanded: boolean; isLow: boolean; isDirector: boolean; lang: string;
+  item: InventoryItem; isExpanded: boolean; isEmpty: boolean; isLow: boolean; isDirector: boolean; lang: Language;
   onPress: () => void; onAddStock: () => void; onEditUnit: () => void; onEditPrice: () => void; onDelete: () => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   return (
-    <TouchableOpacity style={[styles.itemCard, Shadow.sm, isLow && styles.itemCardLow]} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity
+      style={[styles.itemCard, Shadow.sm, isEmpty ? styles.itemCardEmpty : isLow && styles.itemCardLow]}
+      onPress={() => { setConfirmDelete(false); onPress(); }}
+      activeOpacity={0.8}
+    >
       <View style={styles.itemRow}>
         <View style={styles.itemIdBadge}>
           <Text style={styles.itemId}>{item.id}</Text>
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.itemName}>{item.name}</Text>
-          <Text style={styles.itemQty}>{item.qty} {item.unit}</Text>
+          <Text style={[styles.itemQty, isEmpty && styles.itemQtyEmpty]}>
+            {item.qty} {item.unit}
+          </Text>
         </View>
-        {isLow && (
+        {isEmpty ? (
+          <View style={styles.emptyBadge}>
+            <Text style={styles.emptyBadgeText}>{t(lang, 'outOfStock')}</Text>
+          </View>
+        ) : isLow && (
           <View style={styles.lowBadge}>
-            <Text style={styles.lowBadgeText}>{t(lang as any, 'lowStock')}</Text>
+            <Text style={styles.lowBadgeText}>{t(lang, 'lowStock')}</Text>
           </View>
         )}
         <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={Colors.textMuted} />
@@ -355,18 +384,32 @@ function ItemCard({
       {isExpanded && (
         <View style={styles.expandedArea}>
           {isDirector && (
-            <Text style={styles.itemDetail}>{t(lang as any, 'price')}: ${item.price.toFixed(2)} / {item.unit} ({item.currency})</Text>
+            <Text style={styles.itemDetail}>{t(lang, 'price')}: ${item.price.toFixed(2)} / {item.unit} ({item.currency})</Text>
           )}
-          <View style={styles.actionRow}>
-            <ActionBtn label={t(lang as any, 'addStock')} icon="add-circle-outline" onPress={onAddStock} />
-            {isDirector && (
-              <>
-                <ActionBtn label={t(lang as any, 'editUnit')} icon="pencil-outline" onPress={onEditUnit} />
-                <ActionBtn label={t(lang as any, 'editPrice')} icon="pricetag-outline" onPress={onEditPrice} />
-                <ActionBtn label={t(lang as any, 'deleteItem')} icon="trash-outline" onPress={onDelete} color={Colors.error} />
-              </>
-            )}
-          </View>
+          {confirmDelete ? (
+            <View style={styles.confirmRow}>
+              <Text style={styles.confirmText}>{t(lang, 'confirmDelete')}</Text>
+              <View style={styles.confirmBtns}>
+                <TouchableOpacity style={styles.confirmCancel} onPress={() => setConfirmDelete(false)}>
+                  <Text style={styles.confirmCancelText}>{t(lang, 'no')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.confirmDeleteBtn} onPress={onDelete}>
+                  <Text style={styles.confirmDeleteText}>{t(lang, 'yes')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.actionRow}>
+              <ActionBtn label={t(lang, 'addStock')} icon="add-circle-outline" onPress={onAddStock} />
+              {isDirector && (
+                <>
+                  <ActionBtn label={t(lang, 'editUnit')} icon="pencil-outline" onPress={onEditUnit} />
+                  <ActionBtn label={t(lang, 'editPrice')} icon="pricetag-outline" onPress={onEditPrice} />
+                  <ActionBtn label={t(lang, 'deleteItem')} icon="trash-outline" onPress={() => setConfirmDelete(true)} color={Colors.error} />
+                </>
+              )}
+            </View>
+          )}
         </View>
       )}
     </TouchableOpacity>
@@ -383,24 +426,24 @@ function ActionBtn({ label, icon, onPress, color = Colors.primary }: { label: st
 }
 
 function FormModal({ visible, title, onClose, onSave, saveLabel, lang, children }: {
-  visible: boolean; title: string; onClose: () => void; onSave: () => void; saveLabel: string; lang: string; children: React.ReactNode;
+  visible: boolean; title: string; onClose: () => void; onSave: () => void; saveLabel: string; lang: Language; children: React.ReactNode;
 }) {
   return (
     <Modal visible={visible} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalCard}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+        <ScrollView style={styles.modalCard} contentContainerStyle={{ gap: 12 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.modalTitle}>{title}</Text>
           {children}
           <View style={styles.modalBtns}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
-              <Text style={styles.cancelBtnText}>{t(lang as any, 'cancel')}</Text>
+              <Text style={styles.cancelBtnText}>{t(lang, 'cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.saveBtn} onPress={onSave}>
               <Text style={styles.saveBtnText}>{saveLabel}</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -430,16 +473,23 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', margin: Spacing.lg, backgroundColor: Colors.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, paddingHorizontal: Spacing.md },
   searchIcon: { marginRight: Spacing.sm },
   searchInput: { flex: 1, paddingVertical: Spacing.md, fontSize: FontSize.md, color: Colors.text },
-  scroll: { paddingHorizontal: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
+  scroll: { paddingHorizontal: Spacing.lg, gap: Spacing.sm },
   summaryRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
   summaryCard: { flex: 1, backgroundColor: Colors.surface, borderRadius: Radius.md, padding: Spacing.md, alignItems: 'center' },
   summaryNum: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   summaryLabel: { fontSize: FontSize.xs, color: Colors.textSecondary },
+  leatherLink: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.md, borderLeftWidth: 3, borderLeftColor: Colors.primary },
+  leatherLinkText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.primary },
+  leatherLinkCount: { fontSize: FontSize.sm, color: Colors.textSecondary },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm },
   sectionIcon: { fontSize: FontSize.md },
   sectionTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   itemCard: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.md },
   itemCardLow: { borderWidth: 1, borderColor: Colors.error + '60' },
+  itemCardEmpty: { borderWidth: 1.5, borderColor: Colors.error },
+  itemQtyEmpty: { color: Colors.error },
+  emptyBadge: { backgroundColor: Colors.error, paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.full },
+  emptyBadgeText: { fontSize: FontSize.xs, color: Colors.surface, fontWeight: '700' },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
   itemIdBadge: { backgroundColor: Colors.primaryLight, paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.sm },
   itemId: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.primary },
@@ -479,4 +529,11 @@ const styles = StyleSheet.create({
   cancelBtnText: { color: Colors.textSecondary, fontWeight: '600' },
   saveBtn: { flex: 2, padding: Spacing.md, borderRadius: Radius.md, backgroundColor: Colors.primary, alignItems: 'center' },
   saveBtnText: { color: Colors.surface, fontWeight: '700', fontSize: FontSize.md },
+  confirmRow: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.md, gap: Spacing.sm },
+  confirmText: { fontSize: FontSize.sm, color: Colors.text },
+  confirmBtns: { flexDirection: 'row', gap: Spacing.sm },
+  confirmCancel: { flex: 1, padding: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
+  confirmCancelText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
+  confirmDeleteBtn: { flex: 1, padding: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', backgroundColor: Colors.error },
+  confirmDeleteText: { fontSize: FontSize.sm, color: Colors.surface, fontWeight: '700' },
 });

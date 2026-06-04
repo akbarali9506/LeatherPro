@@ -41,6 +41,7 @@ export default {
   editPrice: 'Narxni tahrirlash',
   deleteItem: "Mahsulotni o'chirish",
   lowStock: 'Kam zaxira',
+  outOfStock: 'Tugadi · To\'ldirish kerak',
   addFinishedLeather: "Tayyor teri qo'shish",
   itemName: 'Mahsulot nomi',
   itemType: 'Turi',
@@ -75,6 +76,7 @@ export default {
   amount: 'Miqdor',
   qtyUsed: 'Ishlatilgan miqdor',
   qtyAvailable: 'Mavjud',
+  enterQty: 'Miqdorni kiriting',
   batchStatus: 'Partiya holati',
   finished: 'Tugallangan',
   inProgress: 'Jarayonda',
@@ -159,6 +161,7 @@ export default {
   noPurchaseHistory: "Xarid tarixi yo'q",
   outstanding: 'Qoldiq',
   totalOwed: 'Jami qarzdorlik',
+  markAsPaid: "To'liq to'landi deb belgilash",
 
   paymentStatus: "To'lov holati",
   paid: "To'liq to'langan",
@@ -196,4 +199,7 @@ export default {
   syncing: 'Sinxronlanmoqda...',
   syncError: 'Sinxronlash xatosi — oflayn ishlayapti',
   emailConfirmNote: 'Hisobingizni tasdiqlash uchun emailingizni tekshiring, so\'ng kiring.',
+  clearAll: 'Hammasini tozalash',
+  confirmClearLeather: 'Barcha tayyor terini tozalash? Bu amalni bekor qilib bo\'lmaydi.',
+  incompleteBuyersBanner: 'Ba\'zi xaridorlarning kontakt ma\'lumotlari to\'ldirilmagan. To\'ldirish uchun Tahrirlash tugmasini bosing.',
 };

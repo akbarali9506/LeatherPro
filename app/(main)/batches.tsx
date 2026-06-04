@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
-  Modal, TextInput,
+  Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatUSD } from '../../utils/currency';
-import { Batch, BatchChemical, BatchMaterial, BatchStatus, Currency, Grade, GradeOutput, OtherCost } from '../../types';
+import { Batch, BatchChemical, BatchMaterial, BatchStatus, Grade, GradeOutput, OtherCost } from '../../types';
 import { GRADES, calcBatchCosts } from '../../utils/calc';
 
 const DEFAULT_OUTPUT: Record<Grade, GradeOutput> = {
@@ -22,6 +22,7 @@ export default function BatchesScreen() {
   const { batches, settings, role, saveBatch, deleteBatch } = useApp();
   const lang = settings.language;
   const isDirector = role === 'director';
+  const insets = useSafeAreaInsets();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -33,7 +34,7 @@ export default function BatchesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         {batches.length === 0 && (
           <Text style={styles.emptyText}>{t(lang, 'noBatches')}</Text>
         )}
@@ -51,7 +52,7 @@ export default function BatchesScreen() {
                   </View>
                   <Text style={styles.batchName}>{batch.name}</Text>
                 </View>
-                <Text style={styles.batchDate}>{batch.date} · {batch.hides} hides</Text>
+                <Text style={styles.batchDate}>{batch.date}</Text>
               </View>
               <View style={styles.batchRight}>
                 <View style={[styles.statusBadge, batch.status === 'finished' ? styles.badgeGreen : styles.badgeYellow]}>
@@ -140,7 +141,7 @@ export default function BatchesScreen() {
         ))}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={openNew}>
+      <TouchableOpacity style={[styles.fab, { bottom: Spacing.xl + insets.bottom }]} onPress={openNew}>
         <Ionicons name="add" size={22} color={Colors.surface} />
         <Text style={styles.fabText}>{t(lang, 'newBatch')}</Text>
       </TouchableOpacity>
@@ -231,12 +232,37 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
     }
   }, [visible, editBatch]);
 
-  const wetBlueItems = inventory.filter((i) => i.type === 'Wet Blue');
-  const chemItems = inventory.filter((i) => i.type === 'Chemical');
+  const wetBlueItems = inventory.filter((i) => i.type === 'Wet Blue' && i.qty > 0);
+  const chemItems = inventory.filter((i) => i.type === 'Chemical' && i.qty > 0);
 
   const currentStep = STEPS[step];
 
-  function goNext() { if (step < STEPS.length - 1) setStep(s => s + 1); }
+  function getWetBlueAvail(itemId: string): number {
+    const item = wetBlueItems.find((i) => i.id === itemId);
+    if (!item) return 0;
+    if (!editBatch) return item.qty;
+    const prev = editBatch.wetBlue.find((w) => w.id === itemId);
+    return item.qty + (prev?.qty ?? 0);
+  }
+
+  function getChemAvail(itemId: string): number {
+    const item = chemItems.find((i) => i.id === itemId);
+    if (!item) return 0;
+    if (!editBatch) return item.qty;
+    const prev = editBatch.chemicals.find((c) => c.id === itemId);
+    return item.qty + (prev?.usedQty ?? 0);
+  }
+
+  const wetBlueOverage = data.wetBlue.some((w) => w.qty > getWetBlueAvail(w.id));
+  const wetBlueZeroSelected = data.wetBlue.some((w) => w.qty <= 0);
+  const chemOverage = data.chemicals.some((c) => c.usedQty > getChemAvail(c.id));
+  const chemZeroSelected = data.chemicals.some((c) => c.usedQty <= 0);
+
+  function goNext() {
+    if (currentStep === 'rawMaterial' && (wetBlueOverage || wetBlueZeroSelected)) return;
+    if (currentStep === 'chemicals_step' && (chemOverage || chemZeroSelected)) return;
+    if (step < STEPS.length - 1) setStep(s => s + 1);
+  }
   function goBack() { if (step > 0) setStep(s => s - 1); }
 
   function handleSave() {
@@ -275,6 +301,7 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
 
         <Text style={wStyles.stepTitle}>{t(lang, currentStep as any)}</Text>
 
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={wStyles.scroll} keyboardShouldPersistTaps="handled">
 
           {/* Step 1: Info */}
@@ -284,8 +311,6 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
               <TextInput style={wStyles.input} value={data.name} onChangeText={(v) => setData(d => ({ ...d, name: v }))} placeholder={t(lang, 'batchName')} />
               <WLabel label={t(lang, 'date')} />
               <TextInput style={wStyles.input} value={data.date} onChangeText={(v) => setData(d => ({ ...d, date: v }))} placeholder="YYYY-MM-DD" />
-              <WLabel label={t(lang, 'hides')} />
-              <TextInput style={wStyles.input} value={data.hides} onChangeText={(v) => setData(d => ({ ...d, hides: v }))} keyboardType="number-pad" placeholder="0" />
             </View>
           )}
 
@@ -316,20 +341,29 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
                       <Text style={wStyles.checkLabel}>{item.name}</Text>
                       <Text style={wStyles.checkSub}>{t(lang, 'qtyAvailable')}: {item.qty} {item.unit}</Text>
                     </View>
-                    {sel && (
-                      <TextInput
-                        style={wStyles.smallInput}
-                        value={String(sel.qty || '')}
-                        onChangeText={(v) => {
-                          setData(d => ({
-                            ...d,
-                            wetBlue: d.wetBlue.map(w => w.id === item.id ? { ...w, qty: parseFloat(v) || 0 } : w),
-                          }));
-                        }}
-                        keyboardType="decimal-pad"
-                        placeholder="qty"
-                      />
-                    )}
+                    {sel && (() => {
+                      const avail = getWetBlueAvail(item.id);
+                      const over = sel.qty > avail;
+                      const zero = sel.qty <= 0;
+                      return (
+                        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                          <TextInput
+                            style={[wStyles.smallInput, (over || zero) && wStyles.inputError]}
+                            value={String(sel.qty || '')}
+                            onChangeText={(v) => {
+                              setData(d => ({
+                                ...d,
+                                wetBlue: d.wetBlue.map(w => w.id === item.id ? { ...w, qty: parseFloat(v) || 0 } : w),
+                              }));
+                            }}
+                            keyboardType="decimal-pad"
+                            placeholder="qty"
+                          />
+                          {over && <Text style={wStyles.errorText}>{t(lang, 'qtyAvailable')}: {avail}</Text>}
+                          {!over && zero && <Text style={wStyles.errorText}>{t(lang, 'enterQty')}</Text>}
+                        </View>
+                      );
+                    })()}
                   </View>
                 );
               })}
@@ -367,20 +401,29 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
                         <Text style={wStyles.checkCost}>{t(lang, 'estimatedCost')}: {formatUSD(cost)}</Text>
                       )}
                     </View>
-                    {sel && (
-                      <TextInput
-                        style={wStyles.smallInput}
-                        value={String(sel.usedQty || '')}
-                        onChangeText={(v) => {
-                          setData(d => ({
-                            ...d,
-                            chemicals: d.chemicals.map(c => c.id === item.id ? { ...c, usedQty: parseFloat(v) || 0 } : c),
-                          }));
-                        }}
-                        keyboardType="decimal-pad"
-                        placeholder="kg"
-                      />
-                    )}
+                    {sel && (() => {
+                      const avail = getChemAvail(item.id);
+                      const over = sel.usedQty > avail;
+                      const zero = sel.usedQty <= 0;
+                      return (
+                        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                          <TextInput
+                            style={[wStyles.smallInput, (over || zero) && wStyles.inputError]}
+                            value={String(sel.usedQty || '')}
+                            onChangeText={(v) => {
+                              setData(d => ({
+                                ...d,
+                                chemicals: d.chemicals.map(c => c.id === item.id ? { ...c, usedQty: parseFloat(v) || 0 } : c),
+                              }));
+                            }}
+                            keyboardType="decimal-pad"
+                            placeholder="kg"
+                          />
+                          {over && <Text style={wStyles.errorText}>{t(lang, 'qtyAvailable')}: {avail}</Text>}
+                          {!over && zero && <Text style={wStyles.errorText}>{t(lang, 'enterQty')}</Text>}
+                        </View>
+                      );
+                    })()}
                   </View>
                 );
               })}
@@ -449,7 +492,6 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
               <View style={wStyles.summaryCard}>
                 <SumRow label={t(lang, 'batchName')} value={data.name} />
                 <SumRow label={t(lang, 'date')} value={data.date} />
-                <SumRow label={t(lang, 'hides')} value={data.hides} />
               </View>
 
               {isDirector && (
@@ -479,6 +521,7 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
           )}
 
         </ScrollView>
+        </KeyboardAvoidingView>
 
         <View style={wStyles.navRow}>
           <TouchableOpacity
@@ -522,7 +565,7 @@ function SumRow({ label, value, bold, color }: { label: string; value: string; b
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  scroll: { padding: Spacing.lg, paddingBottom: 100, gap: Spacing.md },
+  scroll: { padding: Spacing.lg, gap: Spacing.md },
   emptyText: { textAlign: 'center', color: Colors.textMuted, marginTop: Spacing.xxl, fontSize: FontSize.md },
   batchCard: { backgroundColor: Colors.surface, borderRadius: Radius.lg },
   batchHeader: { flexDirection: 'row', padding: Spacing.lg, gap: Spacing.sm },
@@ -600,4 +643,6 @@ const wStyles = StyleSheet.create({
   navBtnText: { fontSize: FontSize.md, color: Colors.primary, fontWeight: '600' },
   navBtnPrimary: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.primary, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: Radius.md },
   navBtnPrimaryText: { color: Colors.surface, fontWeight: '700', fontSize: FontSize.md },
+  inputError: { borderColor: Colors.error, backgroundColor: Colors.errorLight },
+  errorText: { fontSize: FontSize.xs, color: Colors.error, fontWeight: '600' },
 });

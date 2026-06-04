@@ -177,4 +177,23 @@ export default {
 
   salesRevenue: 'Haqiqiy savdo daromadi',
   estimatedRevenue: 'Taxminiy (partiya)',
+
+  signUp: "Ro'yxatdan o'tish",
+  signIn: 'Kirish',
+  fullName: 'To\'liq ism',
+  password: 'Parol',
+  emailAddress: 'Email manzil',
+  createOrg: 'Tashkilot yaratish',
+  joinOrg: 'Tashkilotga qo\'shilish',
+  orgName: 'Tashkilot nomi',
+  orgCode: 'Tashkilot kodi',
+  orgSetup: 'Ishxonangizni sozlang',
+  createOrgDesc: 'Yangi boshlash — siz direktor bo\'lasiz',
+  joinOrgDesc: 'Jamoangizga ishchi sifatida qo\'shiling',
+  orgCodeHint: 'Direktoringizdan tashkilot kodini so\'rang',
+  creating: 'Yaratilmoqda...',
+  joining: 'Qo\'shilmoqda...',
+  syncing: 'Sinxronlanmoqda...',
+  syncError: 'Sinxronlash xatosi — oflayn ishlayapti',
+  emailConfirmNote: 'Hisobingizni tasdiqlash uchun emailingizni tekshiring, so\'ng kiring.',
 };

@@ -16,6 +16,17 @@ import {
 import { SEED_INVENTORY, DEFAULT_SETTINGS } from '../constants/seedData';
 import { nextBatchId, nextInventoryId, nextSaleId } from '../utils/ids';
 import { calcBatchCosts, calcWeightedAvg, GRADES } from '../utils/calc';
+import { supabase } from '../lib/supabase';
+import {
+  pullFromSupabase,
+  pushInventory, pushInventoryDeleted,
+  pushBatches, pushBatchDeleted,
+  pushSales, pushSaleDeleted,
+  pushBuyers, pushBuyerDeleted,
+  pushSettings, pushPriceReviews,
+} from '../lib/sync';
+
+// ─── AsyncStorage keys ────────────────────────────────────────────────────────
 
 const KEYS = {
   inventory: '@warehouse/inventory',
@@ -23,10 +34,13 @@ const KEYS = {
   sales: '@warehouse/sales',
   settings: '@warehouse/settings',
   reviews: '@warehouse/reviews',
-  role: '@warehouse/role',
   seeded: '@warehouse/seeded',
   buyers: '@warehouse/buyers',
+  orgId: '@warehouse/orgId',
+  role: '@warehouse/role',
 };
+
+// ─── State ────────────────────────────────────────────────────────────────────
 
 interface State {
   inventory: InventoryItem[];
@@ -36,20 +50,24 @@ interface State {
   pendingReviews: PriceReview[];
   buyers: Buyer[];
   role: Role | null;
+  orgId: string | null;
   isLoading: boolean;
   isSaving: boolean;
+  isSyncing: boolean;
 }
 
 type Action =
-  | { type: 'LOAD'; payload: Omit<State, 'isLoading' | 'isSaving'> }
+  | { type: 'LOAD'; payload: Omit<State, 'isLoading' | 'isSaving' | 'isSyncing'> }
   | { type: 'SET_ROLE'; payload: Role | null }
+  | { type: 'SET_ORG'; payload: string | null }
   | { type: 'SET_INVENTORY'; payload: InventoryItem[] }
   | { type: 'SET_BATCHES'; payload: Batch[] }
   | { type: 'SET_SALES'; payload: Sale[] }
   | { type: 'SET_SETTINGS'; payload: AppSettings }
   | { type: 'SET_REVIEWS'; payload: PriceReview[] }
   | { type: 'SET_BUYERS'; payload: Buyer[] }
-  | { type: 'SET_SAVING'; payload: boolean };
+  | { type: 'SET_SAVING'; payload: boolean }
+  | { type: 'SET_SYNCING'; payload: boolean };
 
 const initial: State = {
   inventory: [],
@@ -59,37 +77,32 @@ const initial: State = {
   pendingReviews: [],
   buyers: [],
   role: null,
+  orgId: null,
   isLoading: true,
   isSaving: false,
+  isSyncing: false,
 };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case 'LOAD':
-      return { ...state, ...action.payload, isLoading: false };
-    case 'SET_ROLE':
-      return { ...state, role: action.payload };
-    case 'SET_INVENTORY':
-      return { ...state, inventory: action.payload };
-    case 'SET_BATCHES':
-      return { ...state, batches: action.payload };
-    case 'SET_SALES':
-      return { ...state, sales: action.payload };
-    case 'SET_SETTINGS':
-      return { ...state, settings: action.payload };
-    case 'SET_REVIEWS':
-      return { ...state, pendingReviews: action.payload };
-    case 'SET_BUYERS':
-      return { ...state, buyers: action.payload };
-    case 'SET_SAVING':
-      return { ...state, isSaving: action.payload };
-    default:
-      return state;
+    case 'LOAD': return { ...state, ...action.payload, isLoading: false };
+    case 'SET_ROLE': return { ...state, role: action.payload };
+    case 'SET_ORG': return { ...state, orgId: action.payload };
+    case 'SET_INVENTORY': return { ...state, inventory: action.payload };
+    case 'SET_BATCHES': return { ...state, batches: action.payload };
+    case 'SET_SALES': return { ...state, sales: action.payload };
+    case 'SET_SETTINGS': return { ...state, settings: action.payload };
+    case 'SET_REVIEWS': return { ...state, pendingReviews: action.payload };
+    case 'SET_BUYERS': return { ...state, buyers: action.payload };
+    case 'SET_SAVING': return { ...state, isSaving: action.payload };
+    case 'SET_SYNCING': return { ...state, isSyncing: action.payload };
+    default: return state;
   }
 }
 
+// ─── Context type ─────────────────────────────────────────────────────────────
+
 interface AppContextType extends State {
-  login: (pin: string) => boolean;
   logout: () => void;
   addInventoryItem: (item: Omit<InventoryItem, 'id'>) => void;
   addStock: (itemId: string, qty: number, newPrice: number, currency: Currency) => void;
@@ -107,9 +120,12 @@ interface AppContextType extends State {
   deleteBuyer: (id: string) => void;
   updateSettings: (patch: Partial<AppSettings>) => void;
   setLanguage: (lang: Language) => void;
+  syncNow: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
+
+// ─── ID helpers ───────────────────────────────────────────────────────────────
 
 function nextBuyerId(buyers: Buyer[]): string {
   const nums = buyers
@@ -119,58 +135,131 @@ function nextBuyerId(buyers: Buyer[]): string {
   return `BY${String(max + 1).padStart(3, '0')}`;
 }
 
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initial);
+
+  // ── 1. Boot: load from AsyncStorage (instant), then sync from Supabase ──────
 
   useEffect(() => {
     (async () => {
       try {
-        const [inv, bat, sal, set, rev, rol, seeded, buy] = await Promise.all([
-          AsyncStorage.getItem(KEYS.inventory),
-          AsyncStorage.getItem(KEYS.batches),
-          AsyncStorage.getItem(KEYS.sales),
-          AsyncStorage.getItem(KEYS.settings),
-          AsyncStorage.getItem(KEYS.reviews),
-          AsyncStorage.getItem(KEYS.role),
-          AsyncStorage.getItem(KEYS.seeded),
-          AsyncStorage.getItem(KEYS.buyers),
-        ]);
+        const [inv, bat, sal, set, rev, seeded, buy, cachedOrgId, cachedRole] =
+          await Promise.all([
+            AsyncStorage.getItem(KEYS.inventory),
+            AsyncStorage.getItem(KEYS.batches),
+            AsyncStorage.getItem(KEYS.sales),
+            AsyncStorage.getItem(KEYS.settings),
+            AsyncStorage.getItem(KEYS.reviews),
+            AsyncStorage.getItem(KEYS.seeded),
+            AsyncStorage.getItem(KEYS.buyers),
+            AsyncStorage.getItem(KEYS.orgId),
+            AsyncStorage.getItem(KEYS.role),
+          ]);
 
         const inventory = inv ? JSON.parse(inv) : seeded ? [] : SEED_INVENTORY;
+        if (!seeded && !inv) await AsyncStorage.setItem(KEYS.inventory, JSON.stringify(SEED_INVENTORY));
         if (!seeded) await AsyncStorage.setItem(KEYS.seeded, '1');
 
         dispatch({
           type: 'LOAD',
           payload: {
-            inventory: inv ? JSON.parse(inv) : inventory,
+            inventory,
             batches: bat ? JSON.parse(bat) : [],
             sales: sal ? JSON.parse(sal) : [],
             settings: set ? { ...DEFAULT_SETTINGS, ...JSON.parse(set) } : DEFAULT_SETTINGS,
             pendingReviews: rev ? JSON.parse(rev) : [],
             buyers: buy ? JSON.parse(buy) : [],
-            role: rol as Role | null,
+            orgId: cachedOrgId,
+            role: cachedRole as Role | null,
           },
         });
-
-        if (!inv && !seeded) {
-          await AsyncStorage.setItem(KEYS.inventory, JSON.stringify(SEED_INVENTORY));
-        }
       } catch {
         dispatch({
           type: 'LOAD',
           payload: {
             inventory: SEED_INVENTORY,
-            batches: [],
-            sales: [],
-            settings: DEFAULT_SETTINGS,
-            pendingReviews: [],
-            buyers: [],
-            role: null,
+            batches: [], sales: [], settings: DEFAULT_SETTINGS,
+            pendingReviews: [], buyers: [], orgId: null, role: null,
           },
         });
       }
     })();
   }, []);
+
+  // ── 2. Listen to Supabase auth → update role + orgId + trigger sync ─────────
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!session) {
+        dispatch({ type: 'SET_ROLE', payload: null });
+        dispatch({ type: 'SET_ORG', payload: null });
+        AsyncStorage.multiRemove([KEYS.role, KEYS.orgId]);
+        return;
+      }
+
+      // Fetch profile to get role + org
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, organization_id')
+        .eq('id', session.user.id)
+        .single();
+
+      if (!profile) return;
+
+      const role = profile.role as Role;
+      const orgId = profile.organization_id as string | null;
+
+      dispatch({ type: 'SET_ROLE', payload: role });
+      dispatch({ type: 'SET_ORG', payload: orgId });
+      AsyncStorage.setItem(KEYS.role, role);
+      if (orgId) AsyncStorage.setItem(KEYS.orgId, orgId);
+
+      // Background sync if we have an org
+      if (orgId) {
+        dispatch({ type: 'SET_SYNCING', payload: true });
+        const result = await pullFromSupabase(orgId);
+        if (result) {
+          dispatch({ type: 'SET_INVENTORY', payload: result.inventory });
+          dispatch({ type: 'SET_BATCHES', payload: result.batches });
+          dispatch({ type: 'SET_SALES', payload: result.sales });
+          dispatch({ type: 'SET_BUYERS', payload: result.buyers });
+          dispatch({ type: 'SET_SETTINGS', payload: result.settings });
+          dispatch({ type: 'SET_REVIEWS', payload: result.pendingReviews });
+          // Update cache
+          AsyncStorage.setItem(KEYS.inventory, JSON.stringify(result.inventory));
+          AsyncStorage.setItem(KEYS.batches, JSON.stringify(result.batches));
+          AsyncStorage.setItem(KEYS.sales, JSON.stringify(result.sales));
+          AsyncStorage.setItem(KEYS.buyers, JSON.stringify(result.buyers));
+          AsyncStorage.setItem(KEYS.settings, JSON.stringify(result.settings));
+          AsyncStorage.setItem(KEYS.reviews, JSON.stringify(result.pendingReviews));
+        }
+        dispatch({ type: 'SET_SYNCING', payload: false });
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── 3. Manual sync ───────────────────────────────────────────────────────────
+
+  const syncNow = useCallback(async () => {
+    if (!state.orgId) return;
+    dispatch({ type: 'SET_SYNCING', payload: true });
+    const result = await pullFromSupabase(state.orgId);
+    if (result) {
+      dispatch({ type: 'SET_INVENTORY', payload: result.inventory });
+      dispatch({ type: 'SET_BATCHES', payload: result.batches });
+      dispatch({ type: 'SET_SALES', payload: result.sales });
+      dispatch({ type: 'SET_BUYERS', payload: result.buyers });
+      dispatch({ type: 'SET_SETTINGS', payload: result.settings });
+      dispatch({ type: 'SET_REVIEWS', payload: result.pendingReviews });
+    }
+    dispatch({ type: 'SET_SYNCING', payload: false });
+  }, [state.orgId]);
+
+  // ── 4. Local save helper ─────────────────────────────────────────────────────
 
   const save = useCallback(async (key: string, data: unknown) => {
     dispatch({ type: 'SET_SAVING', payload: true });
@@ -178,33 +267,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_SAVING', payload: false });
   }, []);
 
-  const login = useCallback((pin: string): boolean => {
-    if (pin === '1111') {
-      dispatch({ type: 'SET_ROLE', payload: 'worker' });
-      AsyncStorage.setItem(KEYS.role, 'worker');
-      return true;
-    }
-    if (pin === '2222') {
-      dispatch({ type: 'SET_ROLE', payload: 'director' });
-      AsyncStorage.setItem(KEYS.role, 'director');
-      return true;
-    }
-    return false;
-  }, []);
+  // ── 5. Auth ──────────────────────────────────────────────────────────────────
 
   const logout = useCallback(() => {
+    supabase.auth.signOut();
     dispatch({ type: 'SET_ROLE', payload: null });
-    AsyncStorage.removeItem(KEYS.role);
+    dispatch({ type: 'SET_ORG', payload: null });
+    AsyncStorage.multiRemove([KEYS.role, KEYS.orgId]);
   }, []);
+
+  // ── 6. Inventory ─────────────────────────────────────────────────────────────
 
   const addInventoryItem = useCallback(
     (item: Omit<InventoryItem, 'id'>) => {
       const id = nextInventoryId(state.inventory, item.type);
-      const updated = [...state.inventory, { ...item, id }];
+      const newItem = { ...item, id };
+      const updated = [...state.inventory, newItem];
       dispatch({ type: 'SET_INVENTORY', payload: updated });
       save(KEYS.inventory, updated);
+      if (state.orgId) pushInventory([newItem], state.orgId);
     },
-    [state.inventory, save],
+    [state.inventory, state.orgId, save],
   );
 
   const addStock = useCallback(
@@ -219,19 +302,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const weighted = calcWeightedAvg(item.qty, item.price, qty, newPrice);
         const existing = reviews.findIndex((r) => r.itemId === itemId);
         const review = {
-          itemId,
-          itemName: item.name,
-          oldPrice: item.price,
-          newPrice,
-          weightedAvg: weighted,
-          currency,
-          addedQty: qty,
-          existingQty: item.qty,
+          itemId, itemName: item.name, oldPrice: item.price,
+          newPrice, weightedAvg: weighted, currency, addedQty: qty, existingQty: item.qty,
         };
         if (existing >= 0) reviews[existing] = review;
         else reviews.push(review);
         dispatch({ type: 'SET_REVIEWS', payload: reviews });
         save(KEYS.reviews, reviews);
+        if (state.orgId) pushPriceReviews(reviews, state.orgId);
       } else if (item.price === 0) {
         price = newPrice;
       }
@@ -241,8 +319,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       dispatch({ type: 'SET_INVENTORY', payload: updated });
       save(KEYS.inventory, updated);
+      if (state.orgId) {
+        const changedItem = updated.find((i) => i.id === itemId);
+        if (changedItem) pushInventory([changedItem], state.orgId);
+      }
     },
-    [state.inventory, state.pendingReviews, save],
+    [state.inventory, state.pendingReviews, state.orgId, save],
   );
 
   const updateItemPrice = useCallback(
@@ -250,8 +332,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updated = state.inventory.map((i) => (i.id === itemId ? { ...i, price } : i));
       dispatch({ type: 'SET_INVENTORY', payload: updated });
       save(KEYS.inventory, updated);
+      if (state.orgId) {
+        const item = updated.find((i) => i.id === itemId);
+        if (item) pushInventory([item], state.orgId);
+      }
     },
-    [state.inventory, save],
+    [state.inventory, state.orgId, save],
   );
 
   const updateItemUnit = useCallback(
@@ -259,8 +345,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updated = state.inventory.map((i) => (i.id === itemId ? { ...i, unit } : i));
       dispatch({ type: 'SET_INVENTORY', payload: updated });
       save(KEYS.inventory, updated);
+      if (state.orgId) {
+        const item = updated.find((i) => i.id === itemId);
+        if (item) pushInventory([item], state.orgId);
+      }
     },
-    [state.inventory, save],
+    [state.inventory, state.orgId, save],
   );
 
   const deleteInventoryItem = useCallback(
@@ -268,8 +358,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updated = state.inventory.filter((i) => i.id !== itemId);
       dispatch({ type: 'SET_INVENTORY', payload: updated });
       save(KEYS.inventory, updated);
+      if (state.orgId) pushInventoryDeleted(itemId, state.orgId);
     },
-    [state.inventory, save],
+    [state.inventory, state.orgId, save],
   );
 
   const resolvePriceReview = useCallback(
@@ -278,22 +369,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!review) return;
 
       const price =
-        choice === 'new'
-          ? review.newPrice
-          : choice === 'avg'
-            ? review.weightedAvg
-            : review.oldPrice;
+        choice === 'new' ? review.newPrice
+        : choice === 'avg' ? review.weightedAvg
+        : review.oldPrice;
 
-      const updated = state.inventory.map((i) => (i.id === itemId ? { ...i, price } : i));
-      dispatch({ type: 'SET_INVENTORY', payload: updated });
-      save(KEYS.inventory, updated);
+      const updatedInv = state.inventory.map((i) => (i.id === itemId ? { ...i, price } : i));
+      dispatch({ type: 'SET_INVENTORY', payload: updatedInv });
+      save(KEYS.inventory, updatedInv);
+      if (state.orgId) {
+        const item = updatedInv.find((i) => i.id === itemId);
+        if (item) pushInventory([item], state.orgId);
+      }
 
       const reviews = state.pendingReviews.filter((r) => r.itemId !== itemId);
       dispatch({ type: 'SET_REVIEWS', payload: reviews });
       save(KEYS.reviews, reviews);
+      if (state.orgId) pushPriceReviews(reviews, state.orgId);
     },
-    [state.inventory, state.pendingReviews, save],
+    [state.inventory, state.pendingReviews, state.orgId, save],
   );
+
+  // ── 7. Batches ───────────────────────────────────────────────────────────────
 
   const saveBatch = useCallback(
     (
@@ -308,18 +404,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const old = batches.find((b) => b.id === editId);
         if (old) {
           old.chemicals.forEach((c) => {
-            inventory = inventory.map((i) =>
-              i.id === c.id ? { ...i, qty: i.qty + c.usedQty } : i,
-            );
+            inventory = inventory.map((i) => i.id === c.id ? { ...i, qty: i.qty + c.usedQty } : i);
           });
           old.wetBlue.forEach((w) => {
-            inventory = inventory.map((i) =>
-              i.id === w.id ? { ...i, qty: i.qty + w.qty } : i,
-            );
+            inventory = inventory.map((i) => i.id === w.id ? { ...i, qty: i.qty + w.qty } : i);
           });
-          const linkedIds = inventory
-            .filter((i) => i.batchId === editId)
-            .map((i) => i.id);
+          const linkedIds = inventory.filter((i) => i.batchId === editId).map((i) => i.id);
           inventory = inventory.filter((i) => i.batchId !== editId);
           sales = sales.filter((s) => !linkedIds.includes(s.inventoryId));
         }
@@ -327,17 +417,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       data.chemicals.forEach((c) => {
-        inventory = inventory.map((i) =>
-          i.id === c.id ? { ...i, qty: Math.max(0, i.qty - c.usedQty) } : i,
-        );
+        inventory = inventory.map((i) => i.id === c.id ? { ...i, qty: Math.max(0, i.qty - c.usedQty) } : i);
       });
       data.wetBlue.forEach((w) => {
-        inventory = inventory.map((i) =>
-          i.id === w.id ? { ...i, qty: Math.max(0, i.qty - w.qty) } : i,
-        );
+        inventory = inventory.map((i) => i.id === w.id ? { ...i, qty: Math.max(0, i.qty - w.qty) } : i);
       });
 
       const batchId = editId ?? nextBatchId(batches);
+      const newInventoryItems: InventoryItem[] = [];
       GRADES.forEach((grade) => {
         const out: GradeOutput = data.output[grade as Grade];
         if (out.qty > 0) {
@@ -345,36 +432,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             [...inventory, ...GRADES.map((_g, gi) => ({ id: `F${gi}` } as InventoryItem))],
             'Finished Leather',
           );
-          inventory.push({
-            id,
-            name: `${data.name} - ${grade}`,
-            type: 'Finished Leather',
-            qty: out.qty,
-            unit: 'dm²',
-            price: out.price,
-            currency: out.currency,
-            grade: grade as Grade,
-            batchId,
-            batchName: data.name,
-          });
+          const item: InventoryItem = {
+            id, name: `${data.name} - ${grade}`, type: 'Finished Leather',
+            qty: out.qty, unit: 'dm²', price: out.price, currency: out.currency,
+            grade: grade as Grade, batchId, batchName: data.name,
+          };
+          inventory.push(item);
+          newInventoryItems.push(item);
         }
       });
 
       const costs = calcBatchCosts(
-        data.chemicals,
-        data.wetBlue,
-        data.otherCosts,
-        data.output as Record<Grade, GradeOutput>,
-        state.settings.exchangeRates,
+        data.chemicals, data.wetBlue, data.otherCosts,
+        data.output as Record<Grade, GradeOutput>, state.settings.exchangeRates,
       );
-
-      const batch: Batch = {
-        ...data,
-        id: batchId,
-        output: data.output as Record<Grade, GradeOutput>,
-        ...costs,
-      };
-
+      const batch: Batch = { ...data, id: batchId, output: data.output as Record<Grade, GradeOutput>, ...costs };
       batches = [...batches, batch];
 
       dispatch({ type: 'SET_INVENTORY', payload: inventory });
@@ -383,8 +455,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       save(KEYS.inventory, inventory);
       save(KEYS.batches, batches);
       save(KEYS.sales, sales);
+
+      if (state.orgId) {
+        pushInventory(inventory, state.orgId);
+        pushBatches([batch], state.orgId);
+        if (editId) pushBatchDeleted(editId, state.orgId);
+      }
     },
-    [state.inventory, state.batches, state.sales, state.settings.exchangeRates, save],
+    [state.inventory, state.batches, state.sales, state.settings.exchangeRates, state.orgId, save],
   );
 
   const deleteBatch = useCallback(
@@ -393,18 +471,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!batch) return;
 
       let inventory = [...state.inventory];
-
       batch.chemicals.forEach((c) => {
-        inventory = inventory.map((i) =>
-          i.id === c.id ? { ...i, qty: i.qty + c.usedQty } : i,
-        );
+        inventory = inventory.map((i) => i.id === c.id ? { ...i, qty: i.qty + c.usedQty } : i);
       });
       batch.wetBlue.forEach((w) => {
-        inventory = inventory.map((i) =>
-          i.id === w.id ? { ...i, qty: i.qty + w.qty } : i,
-        );
+        inventory = inventory.map((i) => i.id === w.id ? { ...i, qty: i.qty + w.qty } : i);
       });
-
       inventory = inventory.filter((i) => i.batchId !== batchId);
 
       const batches = state.batches.filter((b) => b.id !== batchId);
@@ -416,45 +488,57 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       save(KEYS.inventory, inventory);
       save(KEYS.batches, batches);
       save(KEYS.sales, sales);
+
+      if (state.orgId) {
+        pushInventory(inventory, state.orgId);
+        pushBatchDeleted(batchId, state.orgId);
+      }
     },
-    [state.inventory, state.batches, state.sales, save],
+    [state.inventory, state.batches, state.sales, state.orgId, save],
   );
+
+  // ── 8. Sales ─────────────────────────────────────────────────────────────────
 
   const addSale = useCallback(
     (data: Omit<Sale, 'id'>) => {
       const id = nextSaleId(state.sales);
-      const updated = [...state.sales, { ...data, id }];
-
-      // Deduct inventory for both leather and chemical sales
+      const sale = { ...data, id };
+      const updated = [...state.sales, sale];
       const inventory = state.inventory.map((i) =>
         i.id === data.inventoryId ? { ...i, qty: Math.max(0, i.qty - data.qty) } : i,
       );
-
       dispatch({ type: 'SET_SALES', payload: updated });
       dispatch({ type: 'SET_INVENTORY', payload: inventory });
       save(KEYS.sales, updated);
       save(KEYS.inventory, inventory);
+      if (state.orgId) {
+        pushSales([sale], state.orgId);
+        const changedItem = inventory.find((i) => i.id === data.inventoryId);
+        if (changedItem) pushInventory([changedItem], state.orgId);
+      }
     },
-    [state.sales, state.inventory, save],
+    [state.sales, state.inventory, state.orgId, save],
   );
 
   const deleteSale = useCallback(
     (saleId: string) => {
       const sale = state.sales.find((s) => s.id === saleId);
       if (!sale) return;
-
-      // Restore qty for both leather and chemical sales
       const inventory = state.inventory.map((i) =>
         i.id === sale.inventoryId ? { ...i, qty: i.qty + sale.qty } : i,
       );
       const sales = state.sales.filter((s) => s.id !== saleId);
-
       dispatch({ type: 'SET_SALES', payload: sales });
       dispatch({ type: 'SET_INVENTORY', payload: inventory });
       save(KEYS.sales, sales);
       save(KEYS.inventory, inventory);
+      if (state.orgId) {
+        pushSaleDeleted(saleId, state.orgId);
+        const changedItem = inventory.find((i) => i.id === sale.inventoryId);
+        if (changedItem) pushInventory([changedItem], state.orgId);
+      }
     },
-    [state.sales, state.inventory, save],
+    [state.sales, state.inventory, state.orgId, save],
   );
 
   const updateSalePrice = useCallback(
@@ -464,18 +548,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       );
       dispatch({ type: 'SET_SALES', payload: updated });
       save(KEYS.sales, updated);
+      if (state.orgId) pushSales(updated.filter((s) => s.id === saleId), state.orgId);
     },
-    [state.sales, save],
+    [state.sales, state.orgId, save],
   );
+
+  // ── 9. Buyers ────────────────────────────────────────────────────────────────
 
   const addBuyer = useCallback(
     (data: Omit<Buyer, 'id'>) => {
       const id = nextBuyerId(state.buyers);
-      const updated = [...state.buyers, { ...data, id }];
+      const buyer = { ...data, id };
+      const updated = [...state.buyers, buyer];
       dispatch({ type: 'SET_BUYERS', payload: updated });
       save(KEYS.buyers, updated);
+      if (state.orgId) pushBuyers([buyer], state.orgId);
     },
-    [state.buyers, save],
+    [state.buyers, state.orgId, save],
   );
 
   const updateBuyer = useCallback(
@@ -483,8 +572,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updated = state.buyers.map((b) => (b.id === id ? { ...b, ...data } : b));
       dispatch({ type: 'SET_BUYERS', payload: updated });
       save(KEYS.buyers, updated);
+      if (state.orgId) {
+        const buyer = updated.find((b) => b.id === id);
+        if (buyer) pushBuyers([buyer], state.orgId);
+      }
     },
-    [state.buyers, save],
+    [state.buyers, state.orgId, save],
   );
 
   const deleteBuyer = useCallback(
@@ -492,17 +585,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const updated = state.buyers.filter((b) => b.id !== id);
       dispatch({ type: 'SET_BUYERS', payload: updated });
       save(KEYS.buyers, updated);
+      if (state.orgId) pushBuyerDeleted(id, state.orgId);
     },
-    [state.buyers, save],
+    [state.buyers, state.orgId, save],
   );
+
+  // ── 10. Settings ─────────────────────────────────────────────────────────────
 
   const updateSettings = useCallback(
     (patch: Partial<AppSettings>) => {
       const updated = { ...state.settings, ...patch };
       dispatch({ type: 'SET_SETTINGS', payload: updated });
       save(KEYS.settings, updated);
+      if (state.orgId) pushSettings(updated, state.orgId);
     },
-    [state.settings, save],
+    [state.settings, state.orgId, save],
   );
 
   const setLanguage = useCallback(
@@ -511,29 +608,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <AppContext.Provider
-      value={{
-        ...state,
-        login,
-        logout,
-        addInventoryItem,
-        addStock,
-        updateItemPrice,
-        updateItemUnit,
-        deleteInventoryItem,
-        resolvePriceReview,
-        saveBatch,
-        deleteBatch,
-        addSale,
-        deleteSale,
-        updateSalePrice,
-        addBuyer,
-        updateBuyer,
-        deleteBuyer,
-        updateSettings,
-        setLanguage,
-      }}
-    >
+    <AppContext.Provider value={{
+      ...state,
+      logout,
+      addInventoryItem, addStock, updateItemPrice, updateItemUnit, deleteInventoryItem,
+      resolvePriceReview,
+      saveBatch, deleteBatch,
+      addSale, deleteSale, updateSalePrice,
+      addBuyer, updateBuyer, deleteBuyer,
+      updateSettings, setLanguage,
+      syncNow,
+    }}>
       {children}
     </AppContext.Provider>
   );

@@ -5,19 +5,28 @@ import { View, ActivityIndicator } from 'react-native';
 import { Colors } from '../constants/theme';
 
 function RootNavigator() {
-  const { role, isLoading } = useApp();
+  const { role, orgId, isLoading } = useApp();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
     if (isLoading) return;
+
     const inMain = segments[0] === '(main)';
-    if (!role && inMain) {
-      router.replace('/login');
-    } else if (role && !inMain) {
-      router.replace('/(main)/dashboard');
+    const inSetup = segments[0] === 'setup';
+    const inLogin = segments[0] === 'login';
+
+    if (!role) {
+      // Not authenticated → login
+      if (!inLogin) router.replace('/login');
+    } else if (!orgId) {
+      // Authenticated but no organization → setup
+      if (!inSetup) router.replace('/setup');
+    } else {
+      // Authenticated + org → main app
+      if (!inMain) router.replace('/(main)/dashboard');
     }
-  }, [role, isLoading, segments]);
+  }, [role, orgId, isLoading, segments]);
 
   if (isLoading) {
     return (
@@ -30,6 +39,7 @@ function RootNavigator() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="login" />
+      <Stack.Screen name="setup" />
       <Stack.Screen name="(main)" />
     </Stack>
   );

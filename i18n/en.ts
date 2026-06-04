@@ -182,4 +182,24 @@ export default {
   // Reports
   salesRevenue: 'Actual Sales Revenue',
   estimatedRevenue: 'Estimated (Batch)',
+
+  // Auth & setup
+  signUp: 'Sign Up',
+  signIn: 'Sign In',
+  fullName: 'Full Name',
+  password: 'Password',
+  emailAddress: 'Email Address',
+  createOrg: 'Create Organization',
+  joinOrg: 'Join Organization',
+  orgName: 'Organization Name',
+  orgCode: 'Organization Code',
+  orgSetup: 'Set Up Your Workspace',
+  createOrgDesc: 'Start fresh — you will be the director',
+  joinOrgDesc: 'Join your team as a worker',
+  orgCodeHint: 'Ask your director for the organization code',
+  creating: 'Creating...',
+  joining: 'Joining...',
+  syncing: 'Syncing...',
+  syncError: 'Sync failed — working offline',
+  emailConfirmNote: 'Check your email to confirm your account, then sign in.',
 };

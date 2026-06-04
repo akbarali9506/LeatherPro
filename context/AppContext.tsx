@@ -281,11 +281,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let active = true;
     const sessionId = sessionIdRef.current;
 
-    // MERGE_REMOTE: remote data is merged with local state so that locally-created records
-    // that haven't been pushed yet (pending push / failed push) are never silently dropped.
+    // Full replace: remote is authoritative for realtime pulls. Deletions by other users
+    // must propagate — merging would resurrect deleted records from AsyncStorage.
+    // The 45-second skip window on the writer's own device prevents this from running
+    // before a local push completes, so in-progress writes are still safe.
     const applyResult = (result: Awaited<ReturnType<typeof pullFromSupabase>>) => {
       if (!result || !active) return;
-      dispatch({ type: 'MERGE_REMOTE', payload: result });
+      dispatch({ type: 'SET_INVENTORY', payload: result.inventory });
+      dispatch({ type: 'SET_BATCHES', payload: result.batches });
+      dispatch({ type: 'SET_SALES', payload: result.sales });
+      dispatch({ type: 'SET_BUYERS', payload: result.buyers });
+      dispatch({ type: 'SET_SETTINGS', payload: result.settings });
+      dispatch({ type: 'SET_REVIEWS', payload: result.pendingReviews });
+      AsyncStorage.multiSet([
+        [KEYS.inventory, JSON.stringify(result.inventory)],
+        [KEYS.batches, JSON.stringify(result.batches)],
+        [KEYS.sales, JSON.stringify(result.sales)],
+        [KEYS.buyers, JSON.stringify(result.buyers)],
+        [KEYS.settings, JSON.stringify(result.settings)],
+        [KEYS.reviews, JSON.stringify(result.pendingReviews)],
+      ]);
     };
 
     // Called by broadcast listener, postgres_changes listener, and polling interval.
@@ -351,7 +366,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_SYNCING', payload: true });
     const result = await pullFromSupabase(state.orgId);
     if (result) {
-      dispatch({ type: 'MERGE_REMOTE', payload: result });
+      dispatch({ type: 'SET_INVENTORY', payload: result.inventory });
+      dispatch({ type: 'SET_BATCHES', payload: result.batches });
+      dispatch({ type: 'SET_SALES', payload: result.sales });
+      dispatch({ type: 'SET_BUYERS', payload: result.buyers });
+      dispatch({ type: 'SET_SETTINGS', payload: result.settings });
+      dispatch({ type: 'SET_REVIEWS', payload: result.pendingReviews });
+      AsyncStorage.multiSet([
+        [KEYS.inventory, JSON.stringify(result.inventory)],
+        [KEYS.batches, JSON.stringify(result.batches)],
+        [KEYS.sales, JSON.stringify(result.sales)],
+        [KEYS.buyers, JSON.stringify(result.buyers)],
+        [KEYS.settings, JSON.stringify(result.settings)],
+        [KEYS.reviews, JSON.stringify(result.pendingReviews)],
+      ]);
     }
     dispatch({ type: 'SET_SYNCING', payload: false });
   }, [state.orgId]);

@@ -104,6 +104,7 @@ function reducer(state: State, action: Action): State {
 
 interface AppContextType extends State {
   logout: () => void;
+  refreshProfile: () => Promise<void>;
   addInventoryItem: (item: Omit<InventoryItem, 'id'>) => void;
   addStock: (itemId: string, qty: number, newPrice: number, currency: Currency) => void;
   updateItemPrice: (itemId: string, price: number) => void;
@@ -191,7 +192,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── 2. Listen to Supabase auth → update role + orgId + trigger sync ─────────
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!session) {
         dispatch({ type: 'SET_ROLE', payload: null });
         dispatch({ type: 'SET_ORG', payload: null });
@@ -607,10 +608,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [updateSettings],
   );
 
+  // ── 11. Refresh profile + sync (called after org creation/join) ───────────────
+
+  const refreshProfile = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, organization_id')
+      .eq('id', user.id)
+      .single();
+    if (!profile) return;
+
+    const role = profile.role as Role;
+    const orgId = profile.organization_id as string | null;
+
+    dispatch({ type: 'SET_ROLE', payload: role });
+    dispatch({ type: 'SET_ORG', payload: orgId });
+    AsyncStorage.setItem(KEYS.role, role);
+    if (orgId) {
+      AsyncStorage.setItem(KEYS.orgId, orgId);
+      dispatch({ type: 'SET_SYNCING', payload: true });
+      const result = await pullFromSupabase(orgId);
+      if (result) {
+        dispatch({ type: 'SET_INVENTORY', payload: result.inventory });
+        dispatch({ type: 'SET_BATCHES', payload: result.batches });
+        dispatch({ type: 'SET_SALES', payload: result.sales });
+        dispatch({ type: 'SET_BUYERS', payload: result.buyers });
+        dispatch({ type: 'SET_SETTINGS', payload: result.settings });
+        dispatch({ type: 'SET_REVIEWS', payload: result.pendingReviews });
+      }
+      dispatch({ type: 'SET_SYNCING', payload: false });
+    }
+  }, []);
+
   return (
     <AppContext.Provider value={{
       ...state,
       logout,
+      refreshProfile,
       addInventoryItem, addStock, updateItemPrice, updateItemUnit, deleteInventoryItem,
       resolvePriceReview,
       saveBatch, deleteBatch,

@@ -10,7 +10,7 @@ import { t } from '../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../constants/theme';
 
 export default function SetupScreen() {
-  const { settings } = useApp();
+  const { settings, refreshProfile } = useApp();
   const lang = settings.language;
 
   const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
@@ -50,8 +50,8 @@ export default function SetupScreen() {
         exchange_rates: { USD: 1, EUR: 1.1, UZS: 0.000079 },
       });
 
-      // Force session refresh so _layout picks up the new profile
-      await supabase.auth.refreshSession();
+      // Refresh profile in AppContext so _layout navigates to main
+      await refreshProfile();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     }
@@ -81,7 +81,7 @@ export default function SetupScreen() {
         .eq('id', user.id);
       if (profileErr) throw profileErr;
 
-      await supabase.auth.refreshSession();
+      await refreshProfile();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     }

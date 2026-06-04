@@ -1,17 +1,25 @@
 {
   "expo": {
-    "name": "MyApp",
+    "name": "LeatherPro",
     "slug": "MyApp",
     "scheme": "myapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#E6F4FE"
+    },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.leatherpro.app",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.leatherpro.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -26,6 +34,13 @@
     "plugins": [
       "expo-router",
       "expo-status-bar"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b71c5e6a-4903-432d-89da-d05ebe3ede86"
+      }
+    },
+    "owner": "akbaralikomilov"
   }
 }

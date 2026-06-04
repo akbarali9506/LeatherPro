@@ -42,3 +42,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Google Play service account key (contains sensitive credentials)
+google-service-account.json

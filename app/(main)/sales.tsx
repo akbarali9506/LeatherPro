@@ -1,0 +1,649 @@
+import { useState } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet, TouchableOpacity,
+  TextInput, Modal,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useApp } from '../../context/AppContext';
+import { t } from '../../i18n';
+import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
+import { formatUSD, toUSD } from '../../utils/currency';
+import { Currency, InventoryItem, PaymentStatus, Sale, SaleType } from '../../types';
+
+const CURRENCIES: Currency[] = ['USD', 'EUR', 'UZS'];
+type SaleFilter = 'all' | SaleType;
+
+export default function SalesScreen() {
+  const {
+    inventory, sales, settings, role,
+    addSale, deleteSale, updateSalePrice,
+  } = useApp();
+  const lang = settings.language;
+  const isDirector = role === 'director';
+
+  // list state
+  const [typeFilter, setTypeFilter] = useState<SaleFilter>('all');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  // new sale modal
+  const [showNewSale, setShowNewSale] = useState(false);
+  const [saleType, setSaleType] = useState<SaleType>('leather');
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [qty, setQty] = useState('');
+  const [price, setPrice] = useState('');
+  const [currency, setCurrency] = useState<Currency>('USD');
+  const [buyer, setBuyer] = useState('');
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('paid');
+  const [paidAmount, setPaidAmount] = useState('');
+  const [showItemPicker, setShowItemPicker] = useState(false);
+
+  // set price modal (director only)
+  const [setPriceSale, setSetPriceSale] = useState<Sale | null>(null);
+  const [setPriceVal, setSetPriceVal] = useState('');
+  const [setPriceCurrency, setSetPriceCurrency] = useState<Currency>('USD');
+
+  const finishedLeather = inventory.filter((i) => i.type === 'Finished Leather' && i.qty > 0);
+  const chemicals = inventory.filter((i) => i.type === 'Chemical' && i.qty > 0);
+  const pickerItems = saleType === 'leather' ? finishedLeather : chemicals;
+
+  const filteredSales =
+    typeFilter === 'all'
+      ? sales
+      : sales.filter((s) => (s.saleType ?? 'leather') === typeFilter);
+
+  const pendingPricingSales = sales.filter((s) => s.needsPricing);
+
+  const totalRevenue = filteredSales.reduce(
+    (sum, s) =>
+      sum + (s.needsPricing ? 0 : toUSD(s.qty * s.price, s.currency, settings.exchangeRates)),
+    0,
+  );
+
+  function resetForm() {
+    setSaleType('leather');
+    setSelectedItem(null);
+    setQty('');
+    setPrice('');
+    setCurrency('USD');
+    setBuyer('');
+    setSaleDate(new Date().toISOString().split('T')[0]);
+    setPaymentStatus('paid');
+    setPaidAmount('');
+  }
+
+  function handleSave() {
+    if (!selectedItem || !qty || !buyer.trim()) return;
+    const qtyNum = parseFloat(qty);
+    if (isNaN(qtyNum) || qtyNum <= 0 || qtyNum > selectedItem.qty) return;
+    if (isDirector && !price) return;
+
+    addSale({
+      batchId: selectedItem.batchId ?? null,
+      inventoryId: selectedItem.id,
+      grade: selectedItem.grade ?? '',
+      qty: qtyNum,
+      price: isDirector ? parseFloat(price) : 0,
+      currency,
+      buyer: buyer.trim(),
+      date: saleDate,
+      saleType,
+      paymentStatus: isDirector ? paymentStatus : 'paid',
+      paidAmount:
+        isDirector && paymentStatus === 'partial' && paidAmount
+          ? parseFloat(paidAmount)
+          : undefined,
+      needsPricing: !isDirector,
+    });
+    setShowNewSale(false);
+    resetForm();
+  }
+
+  function handleSetPrice() {
+    if (!setPriceSale || !setPriceVal) return;
+    updateSalePrice(setPriceSale.id, parseFloat(setPriceVal), setPriceCurrency);
+    setSetPriceSale(null);
+    setSetPriceVal('');
+  }
+
+  const canSave = !!(selectedItem && qty && buyer.trim() && (!isDirector || price));
+  const totalPreview =
+    isDirector && qty && price
+      ? toUSD(parseFloat(qty) * parseFloat(price), currency, settings.exchangeRates)
+      : 0;
+
+  return (
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+
+      {/* Pending pricing banner — director only */}
+      {isDirector && pendingPricingSales.length > 0 && (
+        <TouchableOpacity
+          style={styles.pendingBanner}
+          onPress={() => {
+            const first = pendingPricingSales[0];
+            setSetPriceSale(first);
+            setSetPriceCurrency('USD');
+            setSetPriceVal('');
+          }}
+        >
+          <Ionicons name="alert-circle-outline" size={16} color={Colors.warning} />
+          <Text style={styles.pendingBannerText}>
+            {pendingPricingSales.length} {t(lang, 'pendingPricing')} — {t(lang, 'setPrice')}
+          </Text>
+          <Ionicons name="chevron-forward" size={14} color={Colors.warning} />
+        </TouchableOpacity>
+      )}
+
+      {/* Type filter tabs */}
+      <View style={styles.tabRow}>
+        {(['all', 'leather', 'chemical'] as SaleFilter[]).map((f) => (
+          <TouchableOpacity
+            key={f}
+            style={[styles.tab, typeFilter === f && styles.tabActive]}
+            onPress={() => setTypeFilter(f)}
+          >
+            <Text style={[styles.tabText, typeFilter === f && styles.tabTextActive]}>
+              {f === 'all'
+                ? t(lang, 'allSales')
+                : f === 'leather'
+                  ? t(lang, 'leatherSales')
+                  : t(lang, 'chemSales')}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Revenue card — director only */}
+      {isDirector && (
+        <View style={[styles.revenueCard, Shadow.sm]}>
+          <Text style={styles.revenueLabel}>{t(lang, 'salesRevenue')}</Text>
+          <Text style={styles.revenueValue}>{formatUSD(totalRevenue)}</Text>
+        </View>
+      )}
+
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {filteredSales.length === 0 && (
+          <Text style={styles.emptyText}>{t(lang, 'noSales')}</Text>
+        )}
+        {filteredSales.slice().reverse().map((sale) => {
+          const item = inventory.find((i) => i.id === sale.inventoryId);
+          const isChemSale = (sale.saleType ?? 'leather') === 'chemical';
+          const isConfirming = confirmDeleteId === sale.id;
+
+          return (
+            <View key={sale.id} style={[styles.saleCard, Shadow.sm]}>
+              <View style={styles.saleHeader}>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.saleNameRow}>
+                    <Text style={styles.saleName}>{item?.name ?? sale.inventoryId}</Text>
+                    <View style={[styles.typeBadge, isChemSale && styles.typeBadgeChem]}>
+                      <Text style={[styles.typeBadgeText, isChemSale && styles.typeBadgeTextChem]}>
+                        {isChemSale ? t(lang, 'chemSales') : t(lang, 'leatherSales')}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.saleDate}>{sale.date} · {sale.buyer}</Text>
+                </View>
+                {!isConfirming && (
+                  <TouchableOpacity onPress={() => setConfirmDeleteId(sale.id)}>
+                    <Ionicons name="trash-outline" size={18} color={Colors.error} />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {sale.needsPricing ? (
+                <>
+                  <Text style={styles.saleDetail}>{sale.qty} {item?.unit ?? 'dm²'}</Text>
+                  {isDirector && (
+                    <>
+                      <Text style={styles.needsPricingText}>{t(lang, 'workerSaleNote')}</Text>
+                      <TouchableOpacity
+                        style={styles.setPriceBtn}
+                        onPress={() => {
+                          setSetPriceSale(sale);
+                          setSetPriceCurrency('USD');
+                          setSetPriceVal('');
+                        }}
+                      >
+                        <Ionicons name="pricetag-outline" size={14} color={Colors.primary} />
+                        <Text style={styles.setPriceBtnText}>{t(lang, 'setPrice')}</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <View style={styles.saleDetails}>
+                    {isDirector ? (
+                      <>
+                        <Text style={styles.saleDetail}>
+                          {sale.qty} {item?.unit ?? 'dm²'} × {sale.currency} {sale.price.toFixed(2)}
+                        </Text>
+                        <Text style={styles.saleTotal}>
+                          {formatUSD(
+                            toUSD(sale.qty * sale.price, sale.currency, settings.exchangeRates),
+                          )}
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={styles.saleDetail}>{sale.qty} {item?.unit ?? 'dm²'}</Text>
+                    )}
+                  </View>
+                  {isDirector && (
+                    <View style={styles.paymentRow}>
+                      <View style={[
+                        styles.paymentBadge,
+                        sale.paymentStatus === 'partial' && styles.paymentBadgePartial,
+                      ]}>
+                        <Text style={[
+                          styles.paymentBadgeText,
+                          sale.paymentStatus === 'partial' && styles.paymentBadgeTextPartial,
+                        ]}>
+                          {sale.paymentStatus === 'partial' ? t(lang, 'partial') : t(lang, 'paid')}
+                        </Text>
+                      </View>
+                      {sale.paymentStatus === 'partial' && sale.paidAmount !== undefined && (
+                        <Text style={styles.paidAmountText}>
+                          {t(lang, 'paidAmount')}: {formatUSD(
+                            toUSD(sale.paidAmount, sale.currency, settings.exchangeRates),
+                          )}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </>
+              )}
+
+              {/* Inline delete confirmation */}
+              {isConfirming && (
+                <View style={styles.confirmRow}>
+                  <Text style={styles.confirmText}>{t(lang, 'confirmDeleteSale')}</Text>
+                  <View style={styles.confirmBtns}>
+                    <TouchableOpacity
+                      style={styles.confirmCancel}
+                      onPress={() => setConfirmDeleteId(null)}
+                    >
+                      <Text style={styles.confirmCancelText}>{t(lang, 'no')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.confirmDelete}
+                      onPress={() => {
+                        deleteSale(sale.id);
+                        setConfirmDeleteId(null);
+                      }}
+                    >
+                      <Text style={styles.confirmDeleteText}>{t(lang, 'yes')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+          );
+        })}
+      </ScrollView>
+
+      <TouchableOpacity style={styles.fab} onPress={() => setShowNewSale(true)}>
+        <Ionicons name="add" size={22} color={Colors.surface} />
+        <Text style={styles.fabText}>{t(lang, 'newSale')}</Text>
+      </TouchableOpacity>
+
+      {/* ── New Sale Modal ── */}
+      <Modal visible={showNewSale} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <ScrollView
+            style={styles.modalSheet}
+            contentContainerStyle={styles.modalContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            <Text style={styles.modalTitle}>{t(lang, 'newSale')}</Text>
+
+            {/* Sale type toggle */}
+            <View style={styles.segmentRow}>
+              {(['leather', 'chemical'] as SaleType[]).map((st) => (
+                <TouchableOpacity
+                  key={st}
+                  style={[styles.segmentBtn, saleType === st && styles.segmentBtnActive]}
+                  onPress={() => { setSaleType(st); setSelectedItem(null); }}
+                >
+                  <Text style={[styles.segmentText, saleType === st && styles.segmentTextActive]}>
+                    {st === 'leather' ? t(lang, 'leatherSales') : t(lang, 'chemSales')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Item picker */}
+            <Text style={styles.fieldLabel}>
+              {saleType === 'leather' ? t(lang, 'selectLeather') : t(lang, 'selectChemItem')}
+            </Text>
+            <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowItemPicker(true)}>
+              <Text style={selectedItem ? styles.pickerSelected : styles.pickerPlaceholder} numberOfLines={1}>
+                {selectedItem
+                  ? `${selectedItem.name} (${selectedItem.qty} ${selectedItem.unit} avail.)`
+                  : t(lang, 'selectLeather')}
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={Colors.textMuted} />
+            </TouchableOpacity>
+
+            {/* Quantity */}
+            <Text style={styles.fieldLabel}>
+              {t(lang, 'quantity')} ({selectedItem?.unit ?? (saleType === 'leather' ? 'dm²' : 'kg')})
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={qty}
+              onChangeText={setQty}
+              keyboardType="decimal-pad"
+              placeholder="0"
+            />
+
+            {/* Price — director only */}
+            {isDirector && (
+              <>
+                <Text style={styles.fieldLabel}>
+                  {t(lang, 'price')} / {selectedItem?.unit ?? 'unit'}
+                </Text>
+                <View style={styles.row}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    value={price}
+                    onChangeText={setPrice}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                  />
+                  <View style={styles.currencyRow}>
+                    {CURRENCIES.map((c) => (
+                      <TouchableOpacity
+                        key={c}
+                        style={[styles.currBtn, currency === c && styles.currBtnActive]}
+                        onPress={() => setCurrency(c)}
+                      >
+                        <Text style={[styles.currText, currency === c && styles.currTextActive]}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+                {totalPreview > 0 && (
+                  <View style={styles.previewRow}>
+                    <Text style={styles.previewLabel}>{t(lang, 'totalValue')}</Text>
+                    <Text style={styles.previewValue}>{formatUSD(totalPreview)}</Text>
+                  </View>
+                )}
+              </>
+            )}
+
+            {/* Buyer */}
+            <Text style={styles.fieldLabel}>{t(lang, 'buyerName')}</Text>
+            <TextInput
+              style={styles.input}
+              value={buyer}
+              onChangeText={setBuyer}
+              placeholder={t(lang, 'buyerName')}
+            />
+
+            {/* Date */}
+            <Text style={styles.fieldLabel}>{t(lang, 'date')}</Text>
+            <TextInput
+              style={styles.input}
+              value={saleDate}
+              onChangeText={setSaleDate}
+              placeholder="YYYY-MM-DD"
+            />
+
+            {/* Payment status — director only */}
+            {isDirector && (
+              <>
+                <Text style={styles.fieldLabel}>{t(lang, 'paymentStatus')}</Text>
+                <View style={styles.row}>
+                  {(['paid', 'partial'] as PaymentStatus[]).map((ps) => (
+                    <TouchableOpacity
+                      key={ps}
+                      style={[styles.segmentBtn, paymentStatus === ps && styles.segmentBtnActive]}
+                      onPress={() => setPaymentStatus(ps)}
+                    >
+                      <Text style={[styles.segmentText, paymentStatus === ps && styles.segmentTextActive]}>
+                        {ps === 'paid' ? t(lang, 'paid') : t(lang, 'partial')}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {paymentStatus === 'partial' && (
+                  <>
+                    <Text style={styles.fieldLabel}>{t(lang, 'paidAmount')} ({currency})</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={paidAmount}
+                      onChangeText={setPaidAmount}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                    />
+                  </>
+                )}
+              </>
+            )}
+
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => { setShowNewSale(false); resetForm(); }}
+              >
+                <Text style={styles.cancelBtnText}>{t(lang, 'cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]}
+                onPress={handleSave}
+                disabled={!canSave}
+              >
+                <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Item Picker Modal ── */}
+      <Modal visible={showItemPicker} transparent animationType="fade">
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <Text style={styles.modalTitle}>
+              {saleType === 'leather' ? t(lang, 'selectLeather') : t(lang, 'selectChemItem')}
+            </Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {pickerItems.length === 0 && (
+                <Text style={[styles.emptyText, { marginTop: Spacing.lg }]}>
+                  {t(lang, 'noItems')}
+                </Text>
+              )}
+              {pickerItems.map((item) => (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.pickerItem}
+                  onPress={() => { setSelectedItem(item); setShowItemPicker(false); }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pickerItemName}>{item.name}</Text>
+                    <Text style={styles.pickerItemDetail}>{item.qty} {item.unit}</Text>
+                  </View>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={20}
+                    color={selectedItem?.id === item.id ? Colors.primary : Colors.border}
+                  />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={styles.saveBtn} onPress={() => setShowItemPicker(false)}>
+              <Text style={styles.saveBtnText}>{t(lang, 'close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Set Price Modal (director) ── */}
+      <Modal visible={!!setPriceSale} transparent animationType="fade">
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerCard}>
+            <Text style={styles.modalTitle}>{t(lang, 'setPrice')}</Text>
+            {setPriceSale && (() => {
+              const saleItem = inventory.find((i) => i.id === setPriceSale.inventoryId);
+              return (
+                <>
+                  <Text style={styles.pickerItemName}>{saleItem?.name ?? setPriceSale.inventoryId}</Text>
+                  <Text style={styles.pickerItemDetail}>
+                    {setPriceSale.qty} {saleItem?.unit ?? 'dm²'} · {setPriceSale.buyer} · {setPriceSale.date}
+                  </Text>
+
+                  <Text style={[styles.fieldLabel, { marginTop: Spacing.sm }]}>
+                    {t(lang, 'price')} / {saleItem?.unit ?? 'unit'}
+                  </Text>
+                  <View style={styles.row}>
+                    <TextInput
+                      style={[styles.input, { flex: 1 }]}
+                      value={setPriceVal}
+                      onChangeText={setSetPriceVal}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                      autoFocus
+                    />
+                    <View style={styles.currencyRow}>
+                      {CURRENCIES.map((c) => (
+                        <TouchableOpacity
+                          key={c}
+                          style={[styles.currBtn, setPriceCurrency === c && styles.currBtnActive]}
+                          onPress={() => setSetPriceCurrency(c)}
+                        >
+                          <Text style={[styles.currText, setPriceCurrency === c && styles.currTextActive]}>{c}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  {pendingPricingSales.length > 1 && (
+                    <Text style={styles.pendingMoreText}>
+                      +{pendingPricingSales.length - 1} more pending
+                    </Text>
+                  )}
+                </>
+              );
+            })()}
+            <View style={styles.modalBtns}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => { setSetPriceSale(null); setSetPriceVal(''); }}
+              >
+                <Text style={styles.cancelBtnText}>{t(lang, 'cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveBtn, !setPriceVal && styles.saveBtnDisabled]}
+                onPress={handleSetPrice}
+                disabled={!setPriceVal}
+              >
+                <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: Colors.background },
+
+  pendingBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,
+    backgroundColor: Colors.warningLight, paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border,
+  },
+  pendingBannerText: { flex: 1, fontSize: FontSize.sm, color: Colors.warning, fontWeight: '600' },
+
+  tabRow: { flexDirection: 'row', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, gap: Spacing.sm },
+  tab: { flex: 1, paddingVertical: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },
+  tabActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  tabText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.textSecondary },
+  tabTextActive: { color: Colors.surface },
+
+  revenueCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.surface, marginHorizontal: Spacing.lg, marginBottom: Spacing.sm, borderRadius: Radius.lg, padding: Spacing.lg },
+  revenueLabel: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  revenueValue: { fontSize: FontSize.xl, fontWeight: '800', color: Colors.success },
+
+  scroll: { padding: Spacing.lg, paddingBottom: 100, gap: Spacing.sm },
+  emptyText: { textAlign: 'center', color: Colors.textMuted, marginTop: Spacing.xxl },
+
+  saleCard: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.lg, gap: Spacing.sm },
+  saleHeader: { flexDirection: 'row', alignItems: 'flex-start' },
+  saleNameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
+  saleName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  typeBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.full, backgroundColor: Colors.primaryLight },
+  typeBadgeChem: { backgroundColor: Colors.warningLight },
+  typeBadgeText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.primary },
+  typeBadgeTextChem: { color: Colors.warning },
+  saleDate: { fontSize: FontSize.sm, color: Colors.textMuted, marginTop: 2 },
+  saleDetails: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  saleDetail: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  saleTotal: { fontSize: FontSize.md, fontWeight: '700', color: Colors.success },
+  needsPricingText: { fontSize: FontSize.sm, color: Colors.warning, fontStyle: 'italic' },
+
+  paymentRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+  paymentBadge: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.full, backgroundColor: Colors.successLight },
+  paymentBadgePartial: { backgroundColor: Colors.warningLight },
+  paymentBadgeText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.success },
+  paymentBadgeTextPartial: { color: Colors.warning },
+  paidAmountText: { fontSize: FontSize.xs, color: Colors.textSecondary },
+
+  setPriceBtn: { flexDirection: 'row', alignItems: 'center', gap: Spacing.xs, alignSelf: 'flex-start', paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.primary },
+  setPriceBtnText: { fontSize: FontSize.xs, fontWeight: '700', color: Colors.primary },
+
+  confirmRow: { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: Spacing.sm, gap: Spacing.sm },
+  confirmText: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  confirmBtns: { flexDirection: 'row', gap: Spacing.sm },
+  confirmCancel: { flex: 1, padding: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
+  confirmCancelText: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
+  confirmDelete: { flex: 1, padding: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', backgroundColor: Colors.error },
+  confirmDeleteText: { fontSize: FontSize.sm, color: Colors.surface, fontWeight: '700' },
+
+  fab: { position: 'absolute', bottom: Spacing.xl, right: Spacing.lg, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.primary, borderRadius: Radius.full, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, ...Shadow.md },
+  fabText: { color: Colors.surface, fontWeight: '700', fontSize: FontSize.md },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: { backgroundColor: Colors.surface, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, maxHeight: '92%' },
+  modalContent: { padding: Spacing.xl, gap: Spacing.md },
+  modalTitle: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
+
+  segmentRow: { flexDirection: 'row', gap: Spacing.sm },
+  segmentBtn: { flex: 1, paddingVertical: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.surface },
+  segmentBtnActive: { backgroundColor: Colors.primary, borderColor: Colors.primary },
+  segmentText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary },
+  segmentTextActive: { color: Colors.surface },
+
+  fieldLabel: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
+  input: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.md, fontSize: FontSize.md, color: Colors.text, backgroundColor: Colors.background },
+  row: { flexDirection: 'row', gap: Spacing.sm, alignItems: 'center' },
+  currencyRow: { flexDirection: 'row', gap: 4 },
+  currBtn: { paddingHorizontal: Spacing.sm, paddingVertical: Spacing.sm, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.border },
+  currBtnActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  currText: { fontSize: FontSize.xs, fontWeight: '600', color: Colors.textSecondary },
+  currTextActive: { color: Colors.primary },
+  previewRow: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: Colors.successLight, padding: Spacing.md, borderRadius: Radius.md },
+  previewLabel: { fontSize: FontSize.sm, color: Colors.success },
+  previewValue: { fontSize: FontSize.md, fontWeight: '700', color: Colors.success },
+
+  modalBtns: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.sm },
+  cancelBtn: { flex: 1, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, alignItems: 'center' },
+  cancelBtnText: { color: Colors.textSecondary, fontWeight: '600' },
+  saveBtn: { flex: 2, padding: Spacing.md, borderRadius: Radius.md, backgroundColor: Colors.primary, alignItems: 'center' },
+  saveBtnDisabled: { backgroundColor: Colors.border },
+  saveBtnText: { color: Colors.surface, fontWeight: '700' },
+
+  pickerBtn: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, padding: Spacing.md, backgroundColor: Colors.background },
+  pickerPlaceholder: { fontSize: FontSize.md, color: Colors.textMuted, flex: 1 },
+  pickerSelected: { fontSize: FontSize.md, color: Colors.text, flex: 1 },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: Spacing.xl },
+  pickerCard: { backgroundColor: Colors.surface, borderRadius: Radius.xl, padding: Spacing.xl, gap: Spacing.md },
+  pickerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: Spacing.md, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  pickerItemName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.text },
+  pickerItemDetail: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  pendingMoreText: { fontSize: FontSize.xs, color: Colors.textMuted, textAlign: 'center', fontStyle: 'italic' },
+});

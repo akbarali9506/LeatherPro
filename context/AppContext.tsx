@@ -351,7 +351,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Called by every write callback: marks a pull-free window, then notifies peers.
   // Window must exceed the 30s poll interval so a poll can't fire before pushes complete.
   const broadcastChange = useCallback(() => {
-    skipPullUntilRef.current = Date.now() + 45000;
+    skipPullUntilRef.current = Date.now() + 10000;
     orgChannelRef.current?.send({
       type: 'broadcast',
       event: 'data-changed',

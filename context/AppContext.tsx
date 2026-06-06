@@ -512,8 +512,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...newInventoryItems,
         ];
         if (itemsToPush.length > 0) pushInventory(itemsToPush, state.orgId);
+        if (editId) pushInventoryBatchDeleted(editId, state.orgId);
         pushBatches([batch], state.orgId);
-        if (editId) pushBatchDeleted(editId, state.orgId);
         broadcastChange();
       }
     },

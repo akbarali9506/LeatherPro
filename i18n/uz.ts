@@ -39,6 +39,8 @@ export default {
   addStock: "Zaxira qo'shish",
   editUnit: 'Birlikni tahrirlash',
   editPrice: 'Narxni tahrirlash',
+  rename: "Nomini o'zgartirish",
+  name: 'Nomi',
   deleteItem: "Mahsulotni o'chirish",
   lowStock: 'Kam zaxira',
   outOfStock: 'Tugadi · To\'ldirish kerak',

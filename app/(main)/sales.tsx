@@ -51,6 +51,8 @@ export default function SalesScreen() {
   const [editPaySale, setEditPaySale] = useState<Sale | null>(null);
   const [editPayStatus, setEditPayStatus] = useState<PaymentStatus>('paid');
   const [editPaidAmount, setEditPaidAmount] = useState('');
+  const [editSalePrice, setEditSalePrice] = useState('');
+  const [editSaleCurrency, setEditSaleCurrency] = useState<Currency>('USD');
 
   const finishedLeather = inventory.filter((i) => i.type === 'Finished Leather' && i.qty > 0);
   const chemicals = inventory.filter((i) => i.type === 'Chemical' && i.qty > 0);
@@ -119,10 +121,16 @@ export default function SalesScreen() {
     setEditPaySale(sale);
     setEditPayStatus(sale.paymentStatus ?? 'paid');
     setEditPaidAmount(sale.paidAmount ? String(sale.paidAmount) : '');
+    setEditSalePrice(String(sale.price));
+    setEditSaleCurrency(sale.currency);
   }
 
   function handleEditPayment() {
     if (!editPaySale) return;
+    const newPrice = parseFloat(editSalePrice);
+    if (!isNaN(newPrice) && (newPrice !== editPaySale.price || editSaleCurrency !== editPaySale.currency)) {
+      updateSalePrice(editPaySale.id, newPrice, editSaleCurrency);
+    }
     updateSalePayment(
       editPaySale.id,
       editPayStatus,
@@ -533,6 +541,32 @@ export default function SalesScreen() {
                   <Text style={styles.pickerItemDetail}>
                     {editPaySale.buyer} · {editPaySale.date}
                   </Text>
+
+                  <Text style={styles.fieldLabel}>
+                    {t(lang, 'price')} / {saleItem?.unit ?? 'unit'}
+                  </Text>
+                  <View style={styles.row}>
+                    <TextInput
+                      style={[styles.input, { flex: 1 }]}
+                      value={editSalePrice}
+                      onChangeText={setEditSalePrice}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                    />
+                    <View style={styles.currencyRow}>
+                      {CURRENCIES.map((c) => (
+                        <TouchableOpacity
+                          key={c}
+                          style={[styles.currBtn, editSaleCurrency === c && styles.currBtnActive]}
+                          onPress={() => setEditSaleCurrency(c)}
+                        >
+                          <Text style={[styles.currText, editSaleCurrency === c && styles.currTextActive]}>{c}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+
+                  <Text style={styles.fieldLabel}>{t(lang, 'paymentStatus')}</Text>
                   <View style={styles.segmentRow}>
                     {(['paid', 'partial'] as PaymentStatus[]).map((ps) => (
                       <TouchableOpacity
@@ -548,14 +582,13 @@ export default function SalesScreen() {
                   </View>
                   {editPayStatus === 'partial' && (
                     <>
-                      <Text style={styles.fieldLabel}>{t(lang, 'paidAmount')} ({editPaySale.currency})</Text>
+                      <Text style={styles.fieldLabel}>{t(lang, 'paidAmount')} ({editSaleCurrency})</Text>
                       <TextInput
                         style={styles.input}
                         value={editPaidAmount}
                         onChangeText={setEditPaidAmount}
                         keyboardType="decimal-pad"
                         placeholder="0.00"
-                        autoFocus
                       />
                     </>
                   )}

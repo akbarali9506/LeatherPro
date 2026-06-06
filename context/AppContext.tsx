@@ -107,6 +107,7 @@ interface AppContextType extends State {
   addStock: (itemId: string, qty: number, newPrice: number, currency: Currency) => void;
   updateItemPrice: (itemId: string, price: number, currency: Currency) => void;
   updateItemUnit: (itemId: string, unit: string) => void;
+  updateItemName: (itemId: string, name: string) => void;
   deleteInventoryItem: (itemId: string) => void;
   clearLeatherWarehouse: () => void;
   resolvePriceReview: (itemId: string, choice: 'new' | 'avg' | 'old') => void;
@@ -372,6 +373,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateItemUnit = useCallback(
     (itemId: string, unit: string) => {
       const updated = state.inventory.map((i) => (i.id === itemId ? { ...i, unit } : i));
+      dispatch({ type: 'SET_INVENTORY', payload: updated });
+      if (state.orgId) {
+        const item = updated.find((i) => i.id === itemId);
+        if (item) pushInventory([item], state.orgId);
+        broadcastChange();
+      }
+    },
+    [state.inventory, state.orgId, broadcastChange],
+  );
+
+  const updateItemName = useCallback(
+    (itemId: string, name: string) => {
+      const updated = state.inventory.map((i) => (i.id === itemId ? { ...i, name } : i));
       dispatch({ type: 'SET_INVENTORY', payload: updated });
       if (state.orgId) {
         const item = updated.find((i) => i.id === itemId);
@@ -759,7 +773,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...state,
       logout,
       refreshProfile,
-      addInventoryItem, addStock, updateItemPrice, updateItemUnit, deleteInventoryItem, clearLeatherWarehouse,
+      addInventoryItem, addStock, updateItemPrice, updateItemUnit, updateItemName, deleteInventoryItem, clearLeatherWarehouse,
       resolvePriceReview,
       saveBatch, deleteBatch,
       addSale, deleteSale, updateSalePrice, updateSalePayment,

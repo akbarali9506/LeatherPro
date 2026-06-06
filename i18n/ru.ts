@@ -39,6 +39,8 @@ export default {
   addStock: 'Пополнить запас',
   editUnit: 'Изменить единицу',
   editPrice: 'Изменить цену',
+  rename: 'Переименовать',
+  name: 'Название',
   deleteItem: 'Удалить товар',
   lowStock: 'Низкий запас',
   outOfStock: 'Закончился · Нужно пополнить',

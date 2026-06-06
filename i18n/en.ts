@@ -39,6 +39,8 @@ export default {
   addStock: 'Add Stock',
   editUnit: 'Edit Unit',
   editPrice: 'Edit Price',
+  rename: 'Rename',
+  name: 'Name',
   deleteItem: 'Delete Item',
   lowStock: 'Low Stock',
   outOfStock: 'Out of Stock · Refill Needed',

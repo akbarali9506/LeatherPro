@@ -210,4 +210,5 @@ export default {
   clearAll: 'Clear All',
   confirmClearLeather: 'Clear all finished leather? This cannot be undone.',
   incompleteBuyersBanner: 'Some buyers are missing contact details. Tap Edit to fill them in.',
+  downloadPdf: 'Download PDF',
 };

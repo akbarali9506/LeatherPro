@@ -204,4 +204,5 @@ export default {
   clearAll: 'Hammasini tozalash',
   confirmClearLeather: 'Barcha tayyor terini tozalash? Bu amalni bekor qilib bo\'lmaydi.',
   incompleteBuyersBanner: 'Ba\'zi xaridorlarning kontakt ma\'lumotlari to\'ldirilmagan. To\'ldirish uchun Tahrirlash tugmasini bosing.',
+  downloadPdf: 'PDF yuklab olish',
 };

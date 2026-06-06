@@ -6,6 +6,7 @@ import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatCurrency, formatUSD, toUSD } from '../../utils/currency';
+import { downloadLeatherPDF } from '../../utils/pdf';
 import { Currency, Grade, InventoryItem } from '../../types';
 
 const GRADES: Grade[] = ['Grade 1', 'Grade 2', 'Grade 3'];
@@ -67,6 +68,15 @@ export default function LeatherScreen() {
             <Text style={styles.summaryNum}>{formatUSD(totalValue)}</Text>
             <Text style={styles.summaryLabel}>{t(lang, 'estimatedValue')}</Text>
           </View>
+        )}
+        {isDirector && finished.length > 0 && (
+          <TouchableOpacity
+            style={styles.pdfBtn}
+            onPress={() => downloadLeatherPDF(inventory, settings)}
+          >
+            <Ionicons name="download-outline" size={14} color={Colors.primary} />
+            <Text style={styles.pdfBtnText}>{t(lang, 'downloadPdf')}</Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -302,8 +312,10 @@ function GradeRow({ item, isDirector, onEdit, onRename, onDelete }: {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  summaryRow: { flexDirection: 'row', gap: Spacing.sm, padding: Spacing.lg, paddingBottom: 0 },
+  summaryRow: { flexDirection: 'row', gap: Spacing.sm, padding: Spacing.lg, paddingBottom: 0, alignItems: 'center', flexWrap: 'wrap' },
   summaryCard: { flex: 1, backgroundColor: Colors.surface, borderRadius: Radius.md, padding: Spacing.md, alignItems: 'center' },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.sm, paddingVertical: 6, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.primary + '50' },
+  pdfBtnText: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '600' },
   summaryNum: { fontSize: FontSize.lg, fontWeight: '700', color: Colors.text },
   summaryLabel: { fontSize: FontSize.xs, color: Colors.textSecondary, textAlign: 'center' },
   toggle: { flexDirection: 'row', margin: Spacing.lg, marginBottom: Spacing.sm, backgroundColor: Colors.border, borderRadius: Radius.md, padding: 3 },

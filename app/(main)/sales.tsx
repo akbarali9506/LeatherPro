@@ -10,6 +10,7 @@ import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatUSD, toUSD } from '../../utils/currency';
+import { downloadSalesPDF } from '../../utils/pdf';
 import { Currency, InventoryItem, PaymentStatus, Sale, SaleType } from '../../types';
 
 const CURRENCIES: Currency[] = ['USD', 'UZS'];
@@ -167,13 +168,24 @@ export default function SalesScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Buyers link — director only */}
+      {/* Buyers link + PDF download — director only */}
       {isDirector && (
-        <TouchableOpacity style={styles.buyersLink} onPress={() => router.push('/(main)/buyers')}>
-          <Ionicons name="people-outline" size={16} color={Colors.primary} />
-          <Text style={styles.buyersLinkText}>{t(lang, 'buyers')}</Text>
-          <Ionicons name="chevron-forward" size={14} color={Colors.primary} />
-        </TouchableOpacity>
+        <View style={styles.directorRow}>
+          <TouchableOpacity style={styles.buyersLink} onPress={() => router.push('/(main)/buyers')}>
+            <Ionicons name="people-outline" size={16} color={Colors.primary} />
+            <Text style={styles.buyersLinkText}>{t(lang, 'buyers')}</Text>
+            <Ionicons name="chevron-forward" size={14} color={Colors.primary} />
+          </TouchableOpacity>
+          {sales.length > 0 && (
+            <TouchableOpacity
+              style={styles.pdfBtn}
+              onPress={() => downloadSalesPDF(sales, inventory, settings)}
+            >
+              <Ionicons name="download-outline" size={14} color={Colors.primary} />
+              <Text style={styles.pdfBtnText}>{t(lang, 'downloadPdf')}</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
 
       {/* Type filter tabs */}
@@ -686,8 +698,11 @@ const styles = StyleSheet.create({
   },
   pendingBannerText: { flex: 1, fontSize: FontSize.sm, color: Colors.warning, fontWeight: '600' },
 
-  buyersLink: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  directorRow: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: Colors.border },
+  buyersLink: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm },
   buyersLinkText: { flex: 1, fontSize: FontSize.sm, color: Colors.primary, fontWeight: '600' },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.md, paddingVertical: 6, marginRight: Spacing.md, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.primary + '50' },
+  pdfBtnText: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '600' },
 
   tabRow: { flexDirection: 'row', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm, gap: Spacing.sm },
   tab: { flex: 1, paddingVertical: Spacing.sm, borderRadius: Radius.md, alignItems: 'center', backgroundColor: Colors.surface, borderWidth: 1, borderColor: Colors.border },

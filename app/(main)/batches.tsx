@@ -9,6 +9,7 @@ import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatUSD } from '../../utils/currency';
+import { downloadBatchPDF } from '../../utils/pdf';
 import { Batch, BatchChemical, BatchMaterial, BatchStatus, Grade, GradeOutput, OtherCost } from '../../types';
 import { GRADES, calcBatchCosts } from '../../utils/calc';
 
@@ -19,7 +20,7 @@ const DEFAULT_OUTPUT: Record<Grade, GradeOutput> = {
 };
 
 export default function BatchesScreen() {
-  const { batches, settings, role, saveBatch, deleteBatch } = useApp();
+  const { batches, inventory, settings, role, saveBatch, deleteBatch } = useApp();
   const lang = settings.language;
   const isDirector = role === 'director';
   const insets = useSafeAreaInsets();
@@ -127,6 +128,15 @@ export default function BatchesScreen() {
                       <Ionicons name="pencil-outline" size={16} color={Colors.primary} />
                       <Text style={[styles.actionBtnText, { color: Colors.primary }]}>{t(lang, 'edit')}</Text>
                     </TouchableOpacity>
+                    {isDirector && (
+                      <TouchableOpacity
+                        style={styles.actionBtn}
+                        onPress={() => downloadBatchPDF(batch, inventory, settings)}
+                      >
+                        <Ionicons name="download-outline" size={16} color={Colors.success} />
+                        <Text style={[styles.actionBtnText, { color: Colors.success }]}>{t(lang, 'downloadPdf')}</Text>
+                      </TouchableOpacity>
+                    )}
                     {isDirector && (
                       <TouchableOpacity style={styles.actionBtn} onPress={() => setConfirmDeleteId(batch.id)}>
                         <Ionicons name="trash-outline" size={16} color={Colors.error} />

@@ -17,6 +17,7 @@ import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatUSD, toUSD } from '../../utils/currency';
+import { downloadChemicalPDF } from '../../utils/pdf';
 import { Currency, InventoryItem, ItemType, Language } from '../../types';
 
 const CURRENCIES: Currency[] = ['USD', 'UZS'];
@@ -159,7 +160,18 @@ export default function StockScreen() {
 
         {/* Section: Chemicals */}
         {chemicals.length > 0 && (
-          <SectionHeader icon="🧪" title={t(lang, 'chemicals')} />
+          <View style={styles.sectionRow}>
+            <SectionHeader icon="🧪" title={t(lang, 'chemicals')} />
+            {isDirector && (
+              <TouchableOpacity
+                style={styles.pdfBtn}
+                onPress={() => downloadChemicalPDF(inventory, settings)}
+              >
+                <Ionicons name="download-outline" size={14} color={Colors.primary} />
+                <Text style={styles.pdfBtnText}>{t(lang, 'downloadPdf')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         )}
         {chemicals.map((item) => (
           <ItemCard
@@ -480,7 +492,10 @@ const styles = StyleSheet.create({
   leatherLink: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.md, borderLeftWidth: 3, borderLeftColor: Colors.primary },
   leatherLinkText: { fontSize: FontSize.md, fontWeight: '600', color: Colors.primary },
   leatherLinkCount: { fontSize: FontSize.sm, color: Colors.textSecondary },
+  sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingVertical: Spacing.sm },
+  pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.sm, paddingVertical: 4, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.primary + '50' },
+  pdfBtnText: { fontSize: FontSize.xs, color: Colors.primary, fontWeight: '600' },
   sectionIcon: { fontSize: FontSize.md },
   sectionTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.text },
   itemCard: { backgroundColor: Colors.surface, borderRadius: Radius.lg, padding: Spacing.md },

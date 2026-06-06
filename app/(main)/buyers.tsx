@@ -10,6 +10,7 @@ import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
 import { formatUSD, toUSD } from '../../utils/currency';
+import { downloadBuyerPDF } from '../../utils/pdf';
 import { Buyer } from '../../types';
 
 export default function BuyersScreen() {
@@ -240,6 +241,15 @@ export default function BuyersScreen() {
                         <Ionicons name="pencil-outline" size={14} color={Colors.primary} />
                         <Text style={styles.editBtnText}>{t(lang, 'edit')}</Text>
                       </TouchableOpacity>
+                      {bSales.length > 0 && (
+                        <TouchableOpacity
+                          style={styles.pdfBtn}
+                          onPress={() => downloadBuyerPDF(buyer, bSales, inventory, settings)}
+                        >
+                          <Ionicons name="download-outline" size={14} color={Colors.success} />
+                          <Text style={styles.pdfBtnText}>{t(lang, 'downloadPdf')}</Text>
+                        </TouchableOpacity>
+                      )}
                       <TouchableOpacity
                         style={styles.deleteBtn}
                         onPress={() => setConfirmDeleteId(buyer.id)}
@@ -404,6 +414,8 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: Spacing.sm, marginTop: Spacing.xs },
   editBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, paddingVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.primary },
   editBtnText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.primary },
+  pdfBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, paddingVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.success },
+  pdfBtnText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.success },
   deleteBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, paddingVertical: Spacing.sm, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.error },
   deleteBtnText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.error },
 

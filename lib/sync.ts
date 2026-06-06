@@ -25,6 +25,7 @@ interface DbBatch {
   hides: number; wet_blue: unknown; chemicals: unknown; other_costs: unknown;
   output: unknown; chem_cost: number; raw_cost: number; other_cost: number;
   total_cost: number; revenue: number; profit: number; status: string;
+  deleted_at?: string | null;
 }
 
 interface DbSale {
@@ -239,7 +240,7 @@ export async function pullFromSupabase(orgId: string): Promise<SyncResult | null
 
   return {
     inventory: (inv.data as DbInventory[]).map(dbToInventory),
-    batches: (bat.data as DbBatch[]).map(dbToBatch),
+    batches: (bat.data as DbBatch[]).filter((r) => !r.deleted_at).map(dbToBatch),
     sales: (sal.data as DbSale[]).map(dbToSale),
     buyers: (buy.data as DbBuyer[]).map(dbToBuyer),
     settings: set.data ? dbToSettings(set.data as DbSettings) : DEFAULT_SETTINGS,
@@ -271,10 +272,10 @@ export async function pushBatches(batches: Batch[], orgId: string): Promise<void
 
 export function pushBatchDeleted(batchId: string, orgId: string) {
   supabase.from('batches')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .eq('id', batchId)
     .eq('organization_id', orgId)
-    .then(({ error }) => { if (error) console.warn('batch delete push:', error.message); });
+    .then(({ error }) => { if (error) console.warn('batch soft delete:', error.message); });
 }
 
 export async function pushInventoryBatchDeleted(batchId: string, orgId: string): Promise<void> {

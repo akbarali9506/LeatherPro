@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors, FontSize, Radius, Shadow, Spacing } from '../../constants/theme';
-import { formatUSD, toUSD } from '../../utils/currency';
+import { formatCurrency, formatUSD, toUSD } from '../../utils/currency';
 import { Currency, Grade, InventoryItem } from '../../types';
 
 const GRADES: Grade[] = ['Grade 1', 'Grade 2', 'Grade 3'];
@@ -113,33 +113,60 @@ export default function LeatherScreen() {
             )}
           </>
         ) : (
-          GRADES.map((grade) => {
-            const items = finished.filter((i) => i.grade === grade);
-            if (items.length === 0) return null;
-            const gradeTotal = items.reduce((s, i) => s + i.qty, 0);
-            const gradeValue = items.reduce((s, i) => s + toUSD(i.qty * i.price, i.currency, rates), 0);
-            return (
-              <View key={grade} style={[styles.gradeSection, Shadow.sm, { borderLeftColor: GRADE_COLORS[grade] }]}>
-                <View style={styles.gradeHeader}>
-                  <View style={[styles.gradeDot, { backgroundColor: GRADE_COLORS[grade] }]} />
-                  <Text style={[styles.gradeTitle, { color: GRADE_COLORS[grade] }]}>{grade}</Text>
-                  <View style={{ flex: 1 }} />
-                  <Text style={styles.gradeTotal}>{gradeTotal.toLocaleString()} dm²</Text>
-                  {isDirector && <Text style={styles.gradeValue}>{formatUSD(gradeValue)}</Text>}
+          <>
+            {GRADES.map((grade) => {
+              const items = finished.filter((i) => i.grade === grade);
+              if (items.length === 0) return null;
+              const gradeTotal = items.reduce((s, i) => s + i.qty, 0);
+              const gradeValue = items.reduce((s, i) => s + toUSD(i.qty * i.price, i.currency, rates), 0);
+              return (
+                <View key={grade} style={[styles.gradeSection, Shadow.sm, { borderLeftColor: GRADE_COLORS[grade] }]}>
+                  <View style={styles.gradeHeader}>
+                    <View style={[styles.gradeDot, { backgroundColor: GRADE_COLORS[grade] }]} />
+                    <Text style={[styles.gradeTitle, { color: GRADE_COLORS[grade] }]}>{grade}</Text>
+                    <View style={{ flex: 1 }} />
+                    <Text style={styles.gradeTotal}>{gradeTotal.toLocaleString()} dm²</Text>
+                    {isDirector && <Text style={styles.gradeValue}>{formatUSD(gradeValue)}</Text>}
+                  </View>
+                  {items.map((item) => (
+                    <GradeRow
+                      key={item.id}
+                      item={item}
+                      isDirector={isDirector}
+                      onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
+                      onDelete={() => deleteInventoryItem(item.id)}
+                    />
+                  ))}
                 </View>
-                {items.map((item) => (
-                  <GradeRow
-                    key={item.id}
-                    item={item}
-                    isDirector={isDirector}
-                    onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
-                    onDelete={() => deleteInventoryItem(item.id)}
-                    showName
-                  />
-                ))}
-              </View>
-            );
-          })
+              );
+            })}
+            {(() => {
+              const ungrouped = finished.filter((i) => !i.grade);
+              if (ungrouped.length === 0) return null;
+              const total = ungrouped.reduce((s, i) => s + i.qty, 0);
+              const value = ungrouped.reduce((s, i) => s + toUSD(i.qty * i.price, i.currency, rates), 0);
+              return (
+                <View style={[styles.gradeSection, Shadow.sm, { borderLeftColor: Colors.textMuted }]}>
+                  <View style={styles.gradeHeader}>
+                    <View style={[styles.gradeDot, { backgroundColor: Colors.textMuted }]} />
+                    <Text style={[styles.gradeTitle, { color: Colors.textMuted }]}>{t(lang, 'manualEntries')}</Text>
+                    <View style={{ flex: 1 }} />
+                    <Text style={styles.gradeTotal}>{total.toLocaleString()} dm²</Text>
+                    {isDirector && <Text style={styles.gradeValue}>{formatUSD(value)}</Text>}
+                  </View>
+                  {ungrouped.map((item) => (
+                    <GradeRow
+                      key={item.id}
+                      item={item}
+                      isDirector={isDirector}
+                      onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
+                      onDelete={() => deleteInventoryItem(item.id)}
+                    />
+                  ))}
+                </View>
+              );
+            })()}
+          </>
         )}
       </ScrollView>
 
@@ -184,8 +211,8 @@ export default function LeatherScreen() {
   );
 }
 
-function GradeRow({ item, isDirector, onEdit, onDelete, showName }: {
-  item: InventoryItem; isDirector: boolean; onEdit: () => void; onDelete: () => void; showName?: boolean;
+function GradeRow({ item, isDirector, onEdit, onDelete }: {
+  item: InventoryItem; isDirector: boolean; onEdit: () => void; onDelete: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const color = item.grade ? GRADE_COLORS[item.grade] : Colors.primary;
@@ -194,9 +221,7 @@ function GradeRow({ item, isDirector, onEdit, onDelete, showName }: {
   if (confirming) {
     return (
       <View style={styles.gradeRow}>
-        <Text style={styles.confirmQuestion} numberOfLines={1}>
-          {showName ? (item.batchName ?? item.name) : (item.grade ?? item.name)}
-        </Text>
+        <Text style={styles.confirmQuestion} numberOfLines={1}>{item.name}</Text>
         <View style={styles.confirmInline}>
           <TouchableOpacity style={styles.confirmCancelBtn} onPress={() => setConfirming(false)}>
             <Text style={styles.confirmCancelText}>✕</Text>
@@ -211,15 +236,14 @@ function GradeRow({ item, isDirector, onEdit, onDelete, showName }: {
 
   return (
     <View style={styles.gradeRow}>
-      {showName ? (
-        <Text style={styles.gradeItemName} numberOfLines={1}>{item.batchName ?? item.name}</Text>
-      ) : (
+      {item.grade && (
         <View style={[styles.gradePill, { backgroundColor: light }]}>
-          <Text style={[styles.gradePillText, { color }]}>{item.grade ?? item.name}</Text>
+          <Text style={[styles.gradePillText, { color }]}>{item.grade}</Text>
         </View>
       )}
+      <Text style={styles.gradeItemName} numberOfLines={1}>{item.name}</Text>
       <Text style={styles.gradeQty}>{item.qty.toLocaleString()} dm²</Text>
-      {isDirector && <Text style={styles.gradePrice}>${item.price.toFixed(2)}/dm²</Text>}
+      {isDirector && <Text style={styles.gradePrice}>{formatCurrency(item.price, item.currency)}/dm²</Text>}
       {isDirector && (
         <TouchableOpacity onPress={onEdit}>
           <Ionicons name="pencil-outline" size={16} color={Colors.primary} />
@@ -259,7 +283,7 @@ const styles = StyleSheet.create({
   gradePill: { paddingHorizontal: Spacing.sm, paddingVertical: 2, borderRadius: Radius.full },
   gradePillText: { fontSize: FontSize.xs, fontWeight: '600' },
   gradeItemName: { flex: 1, fontSize: FontSize.sm, color: Colors.textSecondary },
-  gradeQty: { fontSize: FontSize.sm, color: Colors.textSecondary, flex: 1, textAlign: 'right' },
+  gradeQty: { fontSize: FontSize.sm, color: Colors.textSecondary, textAlign: 'right' },
   gradePrice: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.text },
   confirmQuestion: { flex: 1, fontSize: FontSize.sm, color: Colors.textSecondary },
   confirmInline: { flexDirection: 'row', gap: Spacing.xs },

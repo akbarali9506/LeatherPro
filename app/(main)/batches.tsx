@@ -210,11 +210,13 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
 
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(EMPTY_WIZARD);
+  const [chemSearch, setChemSearch] = useState('');
 
   // Properly reset wizard state when opening or switching between new/edit
   useEffect(() => {
     if (visible) {
       setStep(0);
+      setChemSearch('');
       if (editBatch) {
         setData({
           name: editBatch.name,
@@ -374,7 +376,23 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
           {currentStep === 'chemicals_step' && (
             <View style={wStyles.fields}>
               <Text style={wStyles.helpText}>{t(lang, 'selectChemicals')}</Text>
-              {chemItems.map((item) => {
+              <View style={wStyles.searchRow}>
+                <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
+                <TextInput
+                  style={wStyles.searchInput}
+                  value={chemSearch}
+                  onChangeText={setChemSearch}
+                  placeholder={t(lang, 'search')}
+                  placeholderTextColor={Colors.textMuted}
+                  autoCorrect={false}
+                />
+                {chemSearch.length > 0 && (
+                  <TouchableOpacity onPress={() => setChemSearch('')}>
+                    <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
+              {chemItems.filter(i => i.name.toLowerCase().includes(chemSearch.toLowerCase())).map((item) => {
                 const sel = data.chemicals.find((c) => c.id === item.id);
                 const cost = sel ? sel.usedQty * item.price : 0;
                 return (
@@ -616,6 +634,8 @@ const wStyles = StyleSheet.create({
   label: { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
   input: { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.md, fontSize: FontSize.md, color: Colors.text, backgroundColor: Colors.surface },
   helpText: { fontSize: FontSize.sm, color: Colors.textMuted, marginBottom: Spacing.sm },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.surface, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderWidth: 1, borderColor: Colors.border },
+  searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.text, paddingVertical: 4 },
   checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.surface, borderRadius: Radius.md, padding: Spacing.md, borderWidth: 1, borderColor: Colors.border },
   checkbox: { width: 22, height: 22, borderRadius: Radius.sm, borderWidth: 2, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
   checkboxChecked: { backgroundColor: Colors.primary, borderColor: Colors.primary },

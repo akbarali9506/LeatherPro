@@ -3,10 +3,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useApp } from '../../context/AppContext';
 import { t } from '../../i18n';
 import { Colors } from '../../constants/theme';
-import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, TouchableOpacity } from 'react-native';
 
 export default function MainLayout() {
-  const { role, settings, isSaving } = useApp();
+  const { role, settings } = useApp();
   const lang = settings.language;
   const isDirector = role === 'director';
   const router = useRouter();
@@ -22,12 +22,6 @@ export default function MainLayout() {
         headerTitleStyle: { fontWeight: '700' },
         headerRight: () => (
           <View style={styles.headerRight}>
-            {isSaving && (
-              <>
-                <ActivityIndicator size="small" color={Colors.headerText} />
-                <Text style={styles.savingText}>{t(lang, 'saving')}</Text>
-              </>
-            )}
             {isDirector && (
               <TouchableOpacity onPress={() => router.push('/(main)/settings')} style={styles.settingsBtn}>
                 <Ionicons name="settings-outline" size={22} color={Colors.headerText} />
@@ -85,6 +79,5 @@ export default function MainLayout() {
 
 const styles = StyleSheet.create({
   headerRight: { flexDirection: 'row', alignItems: 'center', marginRight: 12, gap: 6 },
-  savingText: { color: Colors.headerText, fontSize: 12 },
   settingsBtn: { marginLeft: 4 },
 });

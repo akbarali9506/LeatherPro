@@ -11,6 +11,7 @@ import { Currency, Grade, InventoryItem } from '../../types';
 const GRADES: Grade[] = ['Grade 1', 'Grade 2', 'Grade 3'];
 const GRADE_COLORS = { 'Grade 1': Colors.grade1, 'Grade 2': Colors.grade2, 'Grade 3': Colors.grade3 };
 const GRADE_LIGHT = { 'Grade 1': Colors.grade1Light, 'Grade 2': Colors.grade2Light, 'Grade 3': Colors.grade3Light };
+const GRADE_LABEL: Record<Grade, string> = { 'Grade 1': 'S1', 'Grade 2': 'S2', 'Grade 3': 'S3' };
 
 export default function LeatherScreen() {
   const { inventory, settings, role, updateItemPrice, deleteInventoryItem } = useApp();
@@ -123,7 +124,7 @@ export default function LeatherScreen() {
                 <View key={grade} style={[styles.gradeSection, Shadow.sm, { borderLeftColor: GRADE_COLORS[grade] }]}>
                   <View style={styles.gradeHeader}>
                     <View style={[styles.gradeDot, { backgroundColor: GRADE_COLORS[grade] }]} />
-                    <Text style={[styles.gradeTitle, { color: GRADE_COLORS[grade] }]}>{grade}</Text>
+                    <Text style={[styles.gradeTitle, { color: GRADE_COLORS[grade] }]}>{GRADE_LABEL[grade]}</Text>
                     <View style={{ flex: 1 }} />
                     <Text style={styles.gradeTotal}>{gradeTotal.toLocaleString()} dm²</Text>
                     {isDirector && <Text style={styles.gradeValue}>{formatUSD(gradeValue)}</Text>}
@@ -238,7 +239,7 @@ function GradeRow({ item, isDirector, onEdit, onDelete }: {
     <View style={styles.gradeRow}>
       {item.grade && (
         <View style={[styles.gradePill, { backgroundColor: light }]}>
-          <Text style={[styles.gradePillText, { color }]}>{item.grade}</Text>
+          <Text style={[styles.gradePillText, { color }]}>{GRADE_LABEL[item.grade]}</Text>
         </View>
       )}
       <Text style={styles.gradeItemName} numberOfLines={1}>{item.name}</Text>

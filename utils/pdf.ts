@@ -1,4 +1,6 @@
 import { Platform } from 'react-native';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { AppSettings, Batch, Buyer, Grade, GradeOutput, InventoryItem, Sale } from '../types';
 import { toUSD } from './currency';
 
@@ -11,15 +13,7 @@ const GRADE_LABEL: Record<string, string> = {
 const GREEN: [number, number, number] = [39, 105, 73];
 const FOOT_BG: [number, number, number] = [230, 230, 230];
 
-async function getPDF() {
-  const [{ jsPDF }, { default: autoTable }] = await Promise.all([
-    import('jspdf'),
-    import('jspdf-autotable'),
-  ]);
-  return { jsPDF, autoTable };
-}
-
-function docHeader(doc: any, title: string, subtitle?: string): number {
+function docHeader(doc: jsPDF, title: string, subtitle?: string): number {
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   doc.text(title, 14, 20);
@@ -35,12 +29,11 @@ function docHeader(doc: any, title: string, subtitle?: string): number {
   return subtitle ? 42 : 35;
 }
 
-export async function downloadChemicalPDF(
+export function downloadChemicalPDF(
   inventory: InventoryItem[],
   settings: AppSettings,
-): Promise<void> {
+): void {
   if (Platform.OS !== 'web') return;
-  const { jsPDF, autoTable } = await getPDF();
   const doc = new jsPDF();
   const rates = settings.exchangeRates;
   const items = inventory.filter((i) => i.type === 'Chemical');
@@ -77,12 +70,11 @@ export async function downloadChemicalPDF(
   doc.save(`chemical-inventory-${today()}.pdf`);
 }
 
-export async function downloadLeatherPDF(
+export function downloadLeatherPDF(
   inventory: InventoryItem[],
   settings: AppSettings,
-): Promise<void> {
+): void {
   if (Platform.OS !== 'web') return;
-  const { jsPDF, autoTable } = await getPDF();
   const doc = new jsPDF();
   const rates = settings.exchangeRates;
   const items = inventory.filter((i) => i.type === 'Finished Leather' && i.qty > 0);
@@ -127,13 +119,12 @@ export async function downloadLeatherPDF(
   doc.save(`leather-warehouse-${today()}.pdf`);
 }
 
-export async function downloadBatchPDF(
+export function downloadBatchPDF(
   batch: Batch,
   inventory: InventoryItem[],
   settings: AppSettings,
-): Promise<void> {
+): void {
   if (Platform.OS !== 'web') return;
-  const { jsPDF, autoTable } = await getPDF();
   const doc = new jsPDF();
   const rates = settings.exchangeRates;
 
@@ -269,13 +260,12 @@ export async function downloadBatchPDF(
   doc.save(`batch-${batch.id}-${batch.name.replace(/\s+/g, '-')}.pdf`);
 }
 
-export async function downloadSalesPDF(
+export function downloadSalesPDF(
   sales: Sale[],
   inventory: InventoryItem[],
   settings: AppSettings,
-): Promise<void> {
+): void {
   if (Platform.OS !== 'web') return;
-  const { jsPDF, autoTable } = await getPDF();
   const doc = new jsPDF({ orientation: 'landscape' });
   const rates = settings.exchangeRates;
 
@@ -333,14 +323,13 @@ export async function downloadSalesPDF(
   doc.save(`sales-report-${today()}.pdf`);
 }
 
-export async function downloadBuyerPDF(
+export function downloadBuyerPDF(
   buyer: Buyer,
   bSales: Sale[],
   inventory: InventoryItem[],
   settings: AppSettings,
-): Promise<void> {
+): void {
   if (Platform.OS !== 'web') return;
-  const { jsPDF, autoTable } = await getPDF();
   const doc = new jsPDF();
   const rates = settings.exchangeRates;
 
@@ -356,7 +345,6 @@ export async function downloadBuyerPDF(
       return s + (total - paid);
     }, 0);
 
-  // Header
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
   doc.text(`Buyer Statement: ${buyer.name}`, 14, 20);
@@ -373,7 +361,6 @@ export async function downloadBuyerPDF(
 
   const startY = buyer.company && buyer.phone ? 48 : buyer.company || buyer.phone ? 42 : 36;
 
-  // Summary row
   autoTable(doc, {
     startY,
     head: [['Total Spent (USD)', 'Outstanding (USD)', 'Transactions']],
@@ -389,7 +376,6 @@ export async function downloadBuyerPDF(
 
   const afterSummary = (doc as any).lastAutoTable?.finalY ?? startY + 20;
 
-  // Purchase history
   doc.setFontSize(12);
   doc.setFont('helvetica', 'bold');
   doc.text('Purchase History', 14, afterSummary + 10);

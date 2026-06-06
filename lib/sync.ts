@@ -238,9 +238,17 @@ export async function pullFromSupabase(orgId: string): Promise<SyncResult | null
     return null;
   }
 
+  const allBatches = bat.data as DbBatch[];
+  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const expired = allBatches.filter((r) => r.deleted_at && r.deleted_at < cutoff);
+  for (const old of expired) {
+    supabase.from('batches').delete().eq('id', old.id).eq('organization_id', orgId)
+      .then(({ error }) => { if (error) console.warn('batch purge:', error.message); });
+  }
+
   return {
     inventory: (inv.data as DbInventory[]).map(dbToInventory),
-    batches: (bat.data as DbBatch[]).filter((r) => !r.deleted_at).map(dbToBatch),
+    batches: allBatches.filter((r) => !r.deleted_at).map(dbToBatch),
     sales: (sal.data as DbSale[]).map(dbToSale),
     buyers: (buy.data as DbBuyer[]).map(dbToBuyer),
     settings: set.data ? dbToSettings(set.data as DbSettings) : DEFAULT_SETTINGS,

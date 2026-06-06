@@ -507,14 +507,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_SALES', payload: sales });
 
       if (state.orgId) {
-        const itemsToPush = [
-          ...inventory.filter((i) => changedInventoryIds.has(i.id)),
-          ...newInventoryItems,
-        ];
-        if (itemsToPush.length > 0) pushInventory(itemsToPush, state.orgId);
-        if (editId) pushInventoryBatchDeleted(editId, state.orgId);
-        pushBatches([batch], state.orgId);
-        broadcastChange();
+        const rawMaterialItems = inventory.filter(
+          (i) => changedInventoryIds.has(i.id) && i.type !== 'Finished Leather',
+        );
+        if (rawMaterialItems.length > 0) pushInventory(rawMaterialItems, state.orgId);
+        const orgId = state.orgId;
+        (async () => {
+          if (editId) await pushInventoryBatchDeleted(editId, orgId);
+          if (newInventoryItems.length > 0) pushInventory(newInventoryItems, orgId);
+          await pushBatches([batch], orgId);
+          broadcastChange();
+        })();
       }
     },
     [state.inventory, state.batches, state.sales, state.settings.exchangeRates, state.orgId, broadcastChange],

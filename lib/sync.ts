@@ -263,10 +263,10 @@ export function pushInventoryDeleted(itemId: string, orgId: string) {
     .then(({ error }) => { if (error) console.warn('inventory delete push:', error.message); });
 }
 
-export function pushBatches(batches: Batch[], orgId: string) {
-  supabase.from('batches')
-    .upsert(batches.map((b) => batchToDb(b, orgId)))
-    .then(({ error }) => { if (error) console.warn('batches push:', error.message); });
+export async function pushBatches(batches: Batch[], orgId: string): Promise<void> {
+  const { error } = await supabase.from('batches')
+    .upsert(batches.map((b) => batchToDb(b, orgId)));
+  if (error) console.warn('batches push:', error.message);
 }
 
 export function pushBatchDeleted(batchId: string, orgId: string) {
@@ -277,12 +277,12 @@ export function pushBatchDeleted(batchId: string, orgId: string) {
     .then(({ error }) => { if (error) console.warn('batch delete push:', error.message); });
 }
 
-export function pushInventoryBatchDeleted(batchId: string, orgId: string) {
-  supabase.from('inventory')
+export async function pushInventoryBatchDeleted(batchId: string, orgId: string): Promise<void> {
+  const { error } = await supabase.from('inventory')
     .delete()
     .eq('batch_id', batchId)
-    .eq('organization_id', orgId)
-    .then(({ error }) => { if (error) console.warn('inventory batch delete push:', error.message); });
+    .eq('organization_id', orgId);
+  if (error) console.warn('inventory batch delete push:', error.message);
 }
 
 export function pushSalesBatchDeleted(batchId: string, orgId: string) {

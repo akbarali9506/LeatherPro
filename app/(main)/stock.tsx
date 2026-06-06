@@ -403,7 +403,6 @@ function ItemCard({
               <ActionBtn label={t(lang, 'addStock')} icon="add-circle-outline" onPress={onAddStock} />
               {isDirector && (
                 <>
-                  <ActionBtn label={t(lang, 'editUnit')} icon="pencil-outline" onPress={onEditUnit} />
                   <ActionBtn label={t(lang, 'editPrice')} icon="pricetag-outline" onPress={onEditPrice} />
                   <ActionBtn label={t(lang, 'deleteItem')} icon="trash-outline" onPress={() => setConfirmDelete(true)} color={Colors.error} />
                 </>

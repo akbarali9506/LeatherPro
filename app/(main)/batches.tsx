@@ -211,12 +211,14 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(EMPTY_WIZARD);
   const [chemSearch, setChemSearch] = useState('');
+  const [chemQtyRaw, setChemQtyRaw] = useState<Record<string, string>>({});
 
   // Properly reset wizard state when opening or switching between new/edit
   useEffect(() => {
     if (visible) {
       setStep(0);
       setChemSearch('');
+      setChemQtyRaw({});
       if (editBatch) {
         setData({
           name: editBatch.name,
@@ -402,6 +404,7 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
                       onPress={() => {
                         if (sel) {
                           setData(d => ({ ...d, chemicals: d.chemicals.filter(c => c.id !== item.id) }));
+                          setChemQtyRaw(r => { const n = { ...r }; delete n[item.id]; return n; });
                         } else {
                           setData(d => ({
                             ...d,
@@ -427,11 +430,13 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
                         <View style={{ alignItems: 'flex-end', gap: 2 }}>
                           <TextInput
                             style={[wStyles.smallInput, (over || zero) && wStyles.inputError]}
-                            value={String(sel.usedQty || '')}
+                            value={chemQtyRaw[item.id] ?? (sel.usedQty ? String(sel.usedQty) : '')}
                             onChangeText={(v) => {
+                              const normalized = v.replace(',', '.');
+                              setChemQtyRaw(r => ({ ...r, [item.id]: normalized }));
                               setData(d => ({
                                 ...d,
-                                chemicals: d.chemicals.map(c => c.id === item.id ? { ...c, usedQty: parseFloat(v) || 0 } : c),
+                                chemicals: d.chemicals.map(c => c.id === item.id ? { ...c, usedQty: parseFloat(normalized) || 0 } : c),
                               }));
                             }}
                             keyboardType="decimal-pad"

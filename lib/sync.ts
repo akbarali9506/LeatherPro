@@ -175,6 +175,7 @@ export function batchToDb(batch: Batch, orgId: string) {
     revenue: batch.revenue,
     profit: batch.profit,
     status: batch.status,
+    deleted_at: null,
     updated_at: new Date().toISOString(),
   };
 }

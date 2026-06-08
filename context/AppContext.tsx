@@ -557,9 +557,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const batches = state.batches.filter((b) => b.id !== batchId);
       const sales = state.sales.filter((s) => s.batchId !== batchId);
+      const deletedAt = new Date().toISOString();
+      const deletedBatches = [...state.deletedBatches, { ...batch, deletedAt }];
 
       dispatch({ type: 'SET_INVENTORY', payload: inventory });
       dispatch({ type: 'SET_BATCHES', payload: batches });
+      dispatch({ type: 'SET_DELETED_BATCHES', payload: deletedBatches });
       dispatch({ type: 'SET_SALES', payload: sales });
 
       if (state.orgId) {
@@ -570,7 +573,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         broadcastChange();
       }
     },
-    [state.inventory, state.batches, state.sales, state.orgId, broadcastChange],
+    [state.inventory, state.batches, state.deletedBatches, state.sales, state.orgId, broadcastChange],
   );
 
   // ── 7. Sales ─────────────────────────────────────────────────────────────────

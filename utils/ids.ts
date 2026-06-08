@@ -1,4 +1,4 @@
-import { InventoryItem, Batch, Sale } from '../types';
+import { InventoryItem, Batch, DeletedBatch, Sale } from '../types';
 
 function nextId(existing: string[], prefix: string): string {
   const nums = existing
@@ -20,9 +20,9 @@ export function nextInventoryId(
   );
 }
 
-export function nextBatchId(batches: Batch[]): string {
+export function nextBatchId(batches: Batch[], deletedBatches: DeletedBatch[] = []): string {
   return nextId(
-    batches.map((b) => b.id),
+    [...batches, ...deletedBatches].map((b) => b.id),
     'B',
   );
 }

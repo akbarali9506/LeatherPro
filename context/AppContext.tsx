@@ -494,7 +494,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         inventory = inventory.map((i) => i.id === w.id ? { ...i, qty: Math.max(0, i.qty - w.qty) } : i);
       });
 
-      const batchId = editId ?? nextBatchId(batches);
+      const batchId = editId ?? nextBatchId(batches, state.deletedBatches);
       const newInventoryItems: InventoryItem[] = [];
       GRADES.forEach((grade) => {
         const out: GradeOutput = data.output[grade as Grade];

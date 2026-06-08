@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   Modal, TextInput, KeyboardAvoidingView, Platform,
@@ -13,6 +13,8 @@ import { downloadBatchPDF } from '../../utils/pdf';
 import { Batch, BatchChemical, BatchMaterial, BatchStatus, Grade, GradeOutput, OtherCost } from '../../types';
 import { GRADES, calcBatchCosts } from '../../utils/calc';
 
+type SortMode = 'newest' | 'oldest' | 'az' | 'za' | 'numeric';
+
 const DEFAULT_OUTPUT: Record<Grade, GradeOutput> = {
   'Grade 1': { qty: 0, price: 0, currency: 'USD' },
   'Grade 2': { qty: 0, price: 0, currency: 'USD' },
@@ -20,7 +22,7 @@ const DEFAULT_OUTPUT: Record<Grade, GradeOutput> = {
 };
 
 export default function BatchesScreen() {
-  const { batches, inventory, settings, role, saveBatch, deleteBatch } = useApp();
+  const { batches, deletedBatches, inventory, settings, role, saveBatch, deleteBatch, restoreBatch } = useApp();
   const lang = settings.language;
   const isDirector = role === 'director';
   const insets = useSafeAreaInsets();
@@ -29,17 +31,79 @@ export default function BatchesScreen() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [editBatch, setEditBatch] = useState<Batch | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [showDeleted, setShowDeleted] = useState(false);
 
   function openNew() { setEditBatch(null); setWizardOpen(true); }
   function openEdit(batch: Batch) { setEditBatch(batch); setWizardOpen(true); }
 
+  const filteredBatches = useMemo(() => {
+    let list = batches.slice();
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((b) => b.name.toLowerCase().includes(q) || b.id.toLowerCase().includes(q));
+    }
+    switch (sortMode) {
+      case 'newest': list.sort((a, b) => b.date.localeCompare(a.date)); break;
+      case 'oldest': list.sort((a, b) => a.date.localeCompare(b.date)); break;
+      case 'az': list.sort((a, b) => a.name.localeCompare(b.name)); break;
+      case 'za': list.sort((a, b) => b.name.localeCompare(a.name)); break;
+      case 'numeric': list.sort((a, b) => {
+        const na = parseInt(a.id.replace(/\D/g, ''), 10) || 0;
+        const nb = parseInt(b.id.replace(/\D/g, ''), 10) || 0;
+        return na - nb;
+      }); break;
+    }
+    return list;
+  }, [batches, searchQuery, sortMode]);
+
+  const SORT_OPTIONS: { key: SortMode; label: string }[] = [
+    { key: 'newest', label: t(lang, 'sortNewest') },
+    { key: 'oldest', label: t(lang, 'sortOldest') },
+    { key: 'az', label: t(lang, 'sortAZ') },
+    { key: 'za', label: t(lang, 'sortZA') },
+    { key: 'numeric', label: t(lang, 'sortNumeric') },
+  ];
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Search + Sort bar */}
+      <View style={styles.searchBar}>
+        <View style={styles.searchRow}>
+          <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={t(lang, 'searchPlaceholder')}
+            placeholderTextColor={Colors.textMuted}
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortRow}>
+          {SORT_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.key}
+              style={[styles.sortChip, sortMode === opt.key && styles.sortChipActive]}
+              onPress={() => setSortMode(opt.key)}
+            >
+              <Text style={[styles.sortChipText, sortMode === opt.key && styles.sortChipTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]} showsVerticalScrollIndicator={false}>
-        {batches.length === 0 && (
+        {filteredBatches.length === 0 && (
           <Text style={styles.emptyText}>{t(lang, 'noBatches')}</Text>
         )}
-        {batches.slice().reverse().map((batch) => (
+        {filteredBatches.map((batch) => (
           <View key={batch.id} style={[styles.batchCard, Shadow.sm]}>
             <TouchableOpacity
               style={styles.batchHeader}
@@ -106,7 +170,6 @@ export default function BatchesScreen() {
                   </View>
                 )}
 
-                {/* Inline delete confirm */}
                 {confirmDeleteId === batch.id ? (
                   <View style={styles.confirmRow}>
                     <Text style={styles.confirmText}>{t(lang, 'confirmDeleteBatch')}</Text>
@@ -149,6 +212,39 @@ export default function BatchesScreen() {
             )}
           </View>
         ))}
+
+        {/* Recently Deleted — director only */}
+        {isDirector && deletedBatches.length > 0 && (
+          <View style={[styles.deletedSection, Shadow.sm]}>
+            <TouchableOpacity style={styles.deletedHeader} onPress={() => setShowDeleted((v) => !v)} activeOpacity={0.8}>
+              <Ionicons name="trash-outline" size={18} color={Colors.error} />
+              <Text style={styles.deletedTitle}>{t(lang, 'recentlyDeleted')} ({deletedBatches.length})</Text>
+              <Ionicons name={showDeleted ? 'chevron-up' : 'chevron-down'} size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+            {showDeleted && deletedBatches.map((db) => {
+              const daysLeft = Math.max(0, 7 - Math.floor((Date.now() - new Date(db.deletedAt).getTime()) / 86400000));
+              return (
+                <View key={db.id} style={styles.deletedRow}>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.batchTitleRow}>
+                      <View style={styles.idBadge}>
+                        <Text style={styles.idBadgeText}>{db.id}</Text>
+                      </View>
+                      <Text style={styles.deletedName}>{db.name}</Text>
+                    </View>
+                    <Text style={styles.deletedExpiry}>
+                      {t(lang, 'expiresIn')} {daysLeft} {t(lang, 'days')}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.restoreBtn} onPress={() => restoreBatch(db.id)}>
+                    <Ionicons name="refresh-outline" size={14} color={Colors.success} />
+                    <Text style={styles.restoreBtnText}>{t(lang, 'restore')}</Text>
+                  </TouchableOpacity>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
 
       <TouchableOpacity style={[styles.fab, { bottom: Spacing.xl + insets.bottom }]} onPress={openNew}>
@@ -598,8 +694,24 @@ function SumRow({ label, value, bold, color }: { label: string; value: string; b
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  searchBar: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: Spacing.sm },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.background, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderWidth: 1, borderColor: Colors.border },
+  searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.text, paddingVertical: 2 },
+  sortRow: { flexDirection: 'row', gap: Spacing.sm, paddingBottom: Spacing.xs },
+  sortChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background },
+  sortChipActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  sortChipText: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
+  sortChipTextActive: { color: Colors.primary },
   scroll: { padding: Spacing.lg, gap: Spacing.md },
   emptyText: { textAlign: 'center', color: Colors.textMuted, marginTop: Spacing.xxl, fontSize: FontSize.md },
+  deletedSection: { backgroundColor: Colors.surface, borderRadius: Radius.lg, overflow: 'hidden', marginTop: Spacing.md },
+  deletedHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, padding: Spacing.lg },
+  deletedTitle: { flex: 1, fontSize: FontSize.md, fontWeight: '700', color: Colors.error },
+  deletedRow: { flexDirection: 'row', alignItems: 'center', padding: Spacing.lg, paddingTop: 0, gap: Spacing.sm },
+  deletedName: { fontSize: FontSize.md, fontWeight: '600', color: Colors.textSecondary },
+  deletedExpiry: { fontSize: FontSize.xs, color: Colors.textMuted, marginTop: 2 },
+  restoreBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.success },
+  restoreBtnText: { fontSize: FontSize.sm, fontWeight: '600', color: Colors.success },
   batchCard: { backgroundColor: Colors.surface, borderRadius: Radius.lg },
   batchHeader: { flexDirection: 'row', padding: Spacing.lg, gap: Spacing.sm },
   batchTitleRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 2 },

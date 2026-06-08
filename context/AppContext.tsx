@@ -4,6 +4,7 @@ import {
   Batch,
   Buyer,
   Currency,
+  DeletedBatch,
   Grade,
   GradeOutput,
   InventoryItem,
@@ -21,7 +22,7 @@ import { supabase } from '../lib/supabase';
 import {
   pullFromSupabase, SyncResult,
   pushInventory, pushInventoryDeleted,
-  pushBatches, pushBatchDeleted, pushInventoryBatchDeleted,
+  pushBatches, pushBatchDeleted, pushBatchRestored, pushInventoryBatchDeleted,
   pushSales, pushSaleDeleted, pushSalesBatchDeleted,
   pushFinishedLeatherCleared,
   pushBuyers, pushBuyerDeleted,
@@ -34,6 +35,7 @@ import {
 interface State {
   inventory: InventoryItem[];
   batches: Batch[];
+  deletedBatches: DeletedBatch[];
   sales: Sale[];
   settings: AppSettings;
   pendingReviews: PriceReview[];
@@ -50,6 +52,7 @@ type Action =
   | { type: 'SET_ORG'; payload: string | null }
   | { type: 'SET_INVENTORY'; payload: InventoryItem[] }
   | { type: 'SET_BATCHES'; payload: Batch[] }
+  | { type: 'SET_DELETED_BATCHES'; payload: DeletedBatch[] }
   | { type: 'SET_SALES'; payload: Sale[] }
   | { type: 'SET_SETTINGS'; payload: AppSettings }
   | { type: 'SET_REVIEWS'; payload: PriceReview[] }
@@ -60,6 +63,7 @@ type Action =
 const initial: State = {
   inventory: [],
   batches: [],
+  deletedBatches: [],
   sales: [],
   settings: DEFAULT_SETTINGS,
   pendingReviews: [],
@@ -77,6 +81,7 @@ function reducer(state: State, action: Action): State {
     case 'SET_ORG': return { ...state, orgId: action.payload };
     case 'SET_INVENTORY': return { ...state, inventory: action.payload };
     case 'SET_BATCHES': return { ...state, batches: action.payload };
+    case 'SET_DELETED_BATCHES': return { ...state, deletedBatches: action.payload };
     case 'SET_SALES': return { ...state, sales: action.payload };
     case 'SET_SETTINGS': return { ...state, settings: action.payload };
     case 'SET_REVIEWS': return { ...state, pendingReviews: action.payload };
@@ -88,6 +93,7 @@ function reducer(state: State, action: Action): State {
         ...state,
         inventory: r.inventory,
         batches: r.batches,
+        deletedBatches: r.deletedBatches,
         sales: r.sales,
         buyers: r.buyers,
         settings: r.settings,
@@ -113,6 +119,7 @@ interface AppContextType extends State {
   resolvePriceReview: (itemId: string, choice: 'new' | 'avg' | 'old') => void;
   saveBatch: (data: Omit<Batch, 'id' | 'chemCost' | 'rawCost' | 'otherCost' | 'totalCost' | 'revenue' | 'profit'>, editId?: string) => void;
   deleteBatch: (batchId: string) => void;
+  restoreBatch: (batchId: string) => void;
   addSale: (data: Omit<Sale, 'id'>) => void;
   deleteSale: (saleId: string) => void;
   updateSalePrice: (saleId: string, price: number, currency: Currency) => void;
@@ -138,9 +145,12 @@ function nextBuyerId(buyers: Buyer[]): string {
 }
 
 const EMPTY_LOAD = {
-  inventory: [], batches: [], sales: [],
+  inventory: [], batches: [], deletedBatches: [], sales: [],
   settings: DEFAULT_SETTINGS, pendingReviews: [], buyers: [],
 };
+
+// Language chosen on login screen before orgId is known
+let _pendingLang: Language | null = null;
 
 const OLD_CHEM_NAMES = new Set(['Chrome Sulfate', 'Formic Acid', 'Sodium Bicarbonate']);
 
@@ -203,6 +213,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ];
         }
 
+        // Apply language chosen on login screen (before orgId was known)
+        if (_pendingLang) {
+          result.settings = { ...result.settings, language: _pendingLang };
+          pushSettings(result.settings, orgId);
+          _pendingLang = null;
+        }
+
         dispatch({ type: 'LOAD', payload: { ...result, orgId, role } });
       } else {
         dispatch({ type: 'LOAD', payload: { ...EMPTY_LOAD, orgId, role } });
@@ -231,6 +248,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!result || !active) return;
       dispatch({ type: 'SET_INVENTORY', payload: result.inventory });
       dispatch({ type: 'SET_BATCHES', payload: result.batches });
+      dispatch({ type: 'SET_DELETED_BATCHES', payload: result.deletedBatches });
       dispatch({ type: 'SET_SALES', payload: result.sales });
       dispatch({ type: 'SET_BUYERS', payload: result.buyers });
       dispatch({ type: 'SET_SETTINGS', payload: result.settings });
@@ -728,6 +746,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── 9. Settings ─────────────────────────────────────────────────────────────
 
+  const restoreBatch = useCallback(
+    (batchId: string) => {
+      const batch = state.deletedBatches.find((b) => b.id === batchId);
+      if (!batch) return;
+      const { deletedAt: _d, ...batchData } = batch;
+      const updatedDeleted = state.deletedBatches.filter((b) => b.id !== batchId);
+      const updatedBatches = [...state.batches, batchData];
+      dispatch({ type: 'SET_DELETED_BATCHES', payload: updatedDeleted });
+      dispatch({ type: 'SET_BATCHES', payload: updatedBatches });
+      if (state.orgId) { pushBatchRestored(batchId, state.orgId); broadcastChange(); }
+    },
+    [state.deletedBatches, state.batches, state.orgId, broadcastChange],
+  );
+
   const updateSettings = useCallback(
     (patch: Partial<AppSettings>) => {
       const updated = { ...state.settings, ...patch };
@@ -738,8 +770,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const setLanguage = useCallback(
-    (lang: Language) => updateSettings({ language: lang }),
-    [updateSettings],
+    (lang: Language) => {
+      if (!state.orgId) {
+        _pendingLang = lang;
+        dispatch({ type: 'SET_SETTINGS', payload: { ...state.settings, language: lang } });
+      } else {
+        updateSettings({ language: lang });
+      }
+    },
+    [state.orgId, state.settings, updateSettings],
   );
 
   // ── 10. Refresh profile + sync (called after org creation/join) ───────────────
@@ -778,7 +817,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshProfile,
       addInventoryItem, addStock, updateItemPrice, updateItemUnit, updateItemName, deleteInventoryItem, clearLeatherWarehouse,
       resolvePriceReview,
-      saveBatch, deleteBatch,
+      saveBatch, deleteBatch, restoreBatch,
       addSale, deleteSale, updateSalePrice, updateSalePayment,
       addBuyer, updateBuyer, deleteBuyer,
       updateSettings, setLanguage,

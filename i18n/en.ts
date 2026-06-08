@@ -211,4 +211,18 @@ export default {
   confirmClearLeather: 'Clear all finished leather? This cannot be undone.',
   incompleteBuyersBanner: 'Some buyers are missing contact details. Tap Edit to fill them in.',
   downloadPdf: 'Download PDF',
+
+  // Recently deleted
+  recentlyDeleted: 'Recently Deleted',
+  restore: 'Restore',
+  expiresIn: 'Expires in',
+  days: 'days',
+
+  // Sort & search
+  sortNewest: 'Newest',
+  sortOldest: 'Oldest',
+  sortAZ: 'A → Z',
+  sortZA: 'Z → A',
+  sortNumeric: '# Order',
+  searchPlaceholder: 'Search...',
 };

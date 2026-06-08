@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, Modal, KeyboardAvoidingView, Platform,
@@ -15,10 +15,11 @@ import { Currency, InventoryItem, PaymentStatus, Sale, SaleType } from '../../ty
 
 const CURRENCIES: Currency[] = ['USD', 'UZS'];
 type SaleFilter = 'all' | SaleType;
+type SortMode = 'newest' | 'oldest' | 'az' | 'za';
 
 export default function SalesScreen() {
   const {
-    inventory, sales, settings, role,
+    inventory, sales, buyers: allBuyers, settings, role,
     addSale, deleteSale, updateSalePrice, updateSalePayment,
   } = useApp();
   const lang = settings.language;
@@ -29,6 +30,8 @@ export default function SalesScreen() {
   // list state
   const [typeFilter, setTypeFilter] = useState<SaleFilter>('all');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
 
   // new sale modal
   const [showNewSale, setShowNewSale] = useState(false);
@@ -38,6 +41,7 @@ export default function SalesScreen() {
   const [price, setPrice] = useState('');
   const [currency, setCurrency] = useState<Currency>('USD');
   const [buyer, setBuyer] = useState('');
+  const [buyerFocused, setBuyerFocused] = useState(false);
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('paid');
   const [paidAmount, setPaidAmount] = useState('');
@@ -59,18 +63,41 @@ export default function SalesScreen() {
   const chemicals = inventory.filter((i) => i.type === 'Chemical' && i.qty > 0);
   const pickerItems = saleType === 'leather' ? finishedLeather : chemicals;
 
-  const filteredSales =
-    typeFilter === 'all'
-      ? sales
-      : sales.filter((s) => (s.saleType ?? 'leather') === typeFilter);
+  const filteredSales = useMemo(() => {
+    let list = typeFilter === 'all' ? sales.slice() : sales.filter((s) => (s.saleType ?? 'leather') === typeFilter);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((s) => s.buyer.toLowerCase().includes(q) || (inventory.find((i) => i.id === s.inventoryId)?.name ?? '').toLowerCase().includes(q));
+    }
+    switch (sortMode) {
+      case 'newest': list.sort((a, b) => b.date.localeCompare(a.date)); break;
+      case 'oldest': list.sort((a, b) => a.date.localeCompare(b.date)); break;
+      case 'az': list.sort((a, b) => a.buyer.localeCompare(b.buyer)); break;
+      case 'za': list.sort((a, b) => b.buyer.localeCompare(a.buyer)); break;
+    }
+    return list;
+  }, [sales, typeFilter, searchQuery, sortMode, inventory]);
 
   const pendingPricingSales = sales.filter((s) => s.needsPricing);
+
+  const buyerSuggestions = useMemo(() => {
+    if (!buyer.trim() || !buyerFocused) return [];
+    const q = buyer.toLowerCase();
+    return allBuyers.filter((b) => b.name.toLowerCase().includes(q)).slice(0, 5);
+  }, [buyer, buyerFocused, allBuyers]);
 
   const totalRevenue = filteredSales.reduce(
     (sum, s) =>
       sum + (s.needsPricing ? 0 : toUSD(s.qty * s.price, s.currency, settings.exchangeRates)),
     0,
   );
+
+  const SORT_OPTIONS: { key: SortMode; label: string }[] = [
+    { key: 'newest', label: t(lang, 'sortNewest') },
+    { key: 'oldest', label: t(lang, 'sortOldest') },
+    { key: 'az', label: t(lang, 'sortAZ') },
+    { key: 'za', label: t(lang, 'sortZA') },
+  ];
 
   function resetForm() {
     setSaleType('leather');
@@ -79,6 +106,7 @@ export default function SalesScreen() {
     setPrice('');
     setCurrency('USD');
     setBuyer('');
+    setBuyerFocused(false);
     setSaleDate(new Date().toISOString().split('T')[0]);
     setPaymentStatus('paid');
     setPaidAmount('');
@@ -148,6 +176,37 @@ export default function SalesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
+
+      {/* Search + Sort bar */}
+      <View style={styles.searchBar}>
+        <View style={styles.searchRow}>
+          <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={t(lang, 'searchPlaceholder')}
+            placeholderTextColor={Colors.textMuted}
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortRow}>
+          {SORT_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.key}
+              style={[styles.sortChip, sortMode === opt.key && styles.sortChipActive]}
+              onPress={() => setSortMode(opt.key)}
+            >
+              <Text style={[styles.sortChipText, sortMode === opt.key && styles.sortChipTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
       {/* Pending pricing banner — director only */}
       {isDirector && pendingPricingSales.length > 0 && (
@@ -219,7 +278,7 @@ export default function SalesScreen() {
         {filteredSales.length === 0 && (
           <Text style={styles.emptyText}>{t(lang, 'noSales')}</Text>
         )}
-        {filteredSales.slice().reverse().map((sale) => {
+        {filteredSales.map((sale) => {
           const item = inventory.find((i) => i.id === sale.inventoryId);
           const isChemSale = (sale.saleType ?? 'leather') === 'chemical';
           const isConfirming = confirmDeleteId === sale.id;
@@ -433,14 +492,33 @@ export default function SalesScreen() {
               </>
             )}
 
-            {/* Buyer */}
+            {/* Buyer with autocomplete */}
             <Text style={styles.fieldLabel}>{t(lang, 'buyerName')}</Text>
-            <TextInput
-              style={styles.input}
-              value={buyer}
-              onChangeText={setBuyer}
-              placeholder={t(lang, 'buyerName')}
-            />
+            <View>
+              <TextInput
+                style={styles.input}
+                value={buyer}
+                onChangeText={setBuyer}
+                onFocus={() => setBuyerFocused(true)}
+                onBlur={() => setTimeout(() => setBuyerFocused(false), 150)}
+                placeholder={t(lang, 'buyerName')}
+              />
+              {buyerSuggestions.length > 0 && (
+                <View style={styles.suggestions}>
+                  {buyerSuggestions.map((b) => (
+                    <TouchableOpacity
+                      key={b.id}
+                      style={styles.suggestionItem}
+                      onPress={() => { setBuyer(b.name); setBuyerFocused(false); }}
+                    >
+                      <Ionicons name="person-outline" size={14} color={Colors.textMuted} />
+                      <Text style={styles.suggestionText}>{b.name}</Text>
+                      {b.company ? <Text style={styles.suggestionSub}>{b.company}</Text> : null}
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
 
             {/* Date */}
             <Text style={styles.fieldLabel}>{t(lang, 'date')}</Text>
@@ -690,6 +768,19 @@ export default function SalesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+
+  searchBar: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: Spacing.sm },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.background, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderWidth: 1, borderColor: Colors.border },
+  searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.text, paddingVertical: 2 },
+  sortRow: { flexDirection: 'row', gap: Spacing.sm, paddingBottom: Spacing.xs },
+  sortChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background },
+  sortChipActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  sortChipText: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
+  sortChipTextActive: { color: Colors.primary },
+  suggestions: { position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: Colors.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.border, zIndex: 100, ...Shadow.sm },
+  suggestionItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  suggestionText: { fontSize: FontSize.md, color: Colors.text, flex: 1 },
+  suggestionSub: { fontSize: FontSize.xs, color: Colors.textMuted },
 
   pendingBanner: {
     flexDirection: 'row', alignItems: 'center', gap: Spacing.sm,

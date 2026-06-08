@@ -205,4 +205,16 @@ export default {
   confirmClearLeather: 'Barcha tayyor terini tozalash? Bu amalni bekor qilib bo\'lmaydi.',
   incompleteBuyersBanner: 'Ba\'zi xaridorlarning kontakt ma\'lumotlari to\'ldirilmagan. To\'ldirish uchun Tahrirlash tugmasini bosing.',
   downloadPdf: 'PDF yuklab olish',
+
+  recentlyDeleted: "O'chirilganlar",
+  restore: 'Tiklash',
+  expiresIn: 'Muddati tugaydi',
+  days: 'kun',
+
+  sortNewest: 'Eng yangi',
+  sortOldest: 'Eng eski',
+  sortAZ: 'A → Z',
+  sortZA: 'Z → A',
+  sortNumeric: '# Tartib',
+  searchPlaceholder: 'Qidirish...',
 };

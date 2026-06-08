@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity,
   TextInput, Modal, KeyboardAvoidingView, Platform,
@@ -32,6 +32,8 @@ export default function BuyersScreen() {
   const [showForm, setShowForm] = useState(false);
   const [editBuyer, setEditBuyer] = useState<Buyer | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<'az' | 'za' | 'newest'>('az');
 
   const [formName, setFormName] = useState('');
   const [formCompany, setFormCompany] = useState('');
@@ -100,6 +102,26 @@ export default function BuyersScreen() {
 
   const incompleteBuyers = buyers.filter((b) => !b.company && !b.phone);
 
+  const filteredBuyers = useMemo(() => {
+    let list = buyers.slice();
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((b) => b.name.toLowerCase().includes(q) || (b.company ?? '').toLowerCase().includes(q));
+    }
+    switch (sortMode) {
+      case 'az': list.sort((a, b) => a.name.localeCompare(b.name)); break;
+      case 'za': list.sort((a, b) => b.name.localeCompare(a.name)); break;
+      case 'newest': list.reverse(); break;
+    }
+    return list;
+  }, [buyers, searchQuery, sortMode]);
+
+  const SORT_OPTIONS = [
+    { key: 'az' as const, label: t(lang, 'sortAZ') },
+    { key: 'za' as const, label: t(lang, 'sortZA') },
+    { key: 'newest' as const, label: t(lang, 'sortNewest') },
+  ];
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {incompleteBuyers.length > 0 && (
@@ -108,12 +130,44 @@ export default function BuyersScreen() {
           <Text style={styles.incompleteBannerText}>{t(lang, 'incompleteBuyersBanner')}</Text>
         </View>
       )}
+
+      {/* Search + Sort bar */}
+      <View style={styles.searchBar}>
+        <View style={styles.searchRow}>
+          <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={t(lang, 'searchPlaceholder')}
+            placeholderTextColor={Colors.textMuted}
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortRow}>
+          {SORT_OPTIONS.map((opt) => (
+            <TouchableOpacity
+              key={opt.key}
+              style={[styles.sortChip, sortMode === opt.key && styles.sortChipActive]}
+              onPress={() => setSortMode(opt.key)}
+            >
+              <Text style={[styles.sortChipText, sortMode === opt.key && styles.sortChipTextActive]}>{opt.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
       <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]} showsVerticalScrollIndicator={false}>
-        {buyers.length === 0 && (
+        {filteredBuyers.length === 0 && (
           <Text style={styles.emptyText}>{t(lang, 'noBuyers')}</Text>
         )}
 
-        {buyers.map((buyer) => {
+        {filteredBuyers.map((buyer) => {
           const bSales = buyerSales(buyer);
           const outstanding = buyerOutstanding(buyer);
           const totalSpent = buyerTotalSpent(buyer);
@@ -373,6 +427,15 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   scroll: { padding: Spacing.lg, gap: Spacing.sm },
   emptyText: { textAlign: 'center', color: Colors.textMuted, marginTop: Spacing.xxl },
+
+  searchBar: { backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, paddingHorizontal: Spacing.lg, paddingTop: Spacing.md, paddingBottom: Spacing.sm, gap: Spacing.sm },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.background, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderWidth: 1, borderColor: Colors.border },
+  searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.text, paddingVertical: 2 },
+  sortRow: { flexDirection: 'row', gap: Spacing.sm, paddingBottom: Spacing.xs },
+  sortChip: { paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.background },
+  sortChipActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
+  sortChipText: { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
+  sortChipTextActive: { color: Colors.primary },
 
   incompleteBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, margin: Spacing.lg, marginBottom: 0, padding: Spacing.md, backgroundColor: Colors.warningLight, borderRadius: Radius.md },
   incompleteBannerText: { flex: 1, fontSize: FontSize.sm, color: Colors.warning, fontWeight: '600' },

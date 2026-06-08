@@ -4,6 +4,7 @@ import {
   Batch,
   Buyer,
   Currency,
+  DeletedBatch,
   Grade,
   GradeOutput,
   InventoryItem,
@@ -218,6 +219,7 @@ export function buyerToDb(buyer: Buyer, orgId: string) {
 export interface SyncResult {
   inventory: InventoryItem[];
   batches: Batch[];
+  deletedBatches: DeletedBatch[];
   sales: Sale[];
   buyers: Buyer[];
   settings: AppSettings;
@@ -250,6 +252,9 @@ export async function pullFromSupabase(orgId: string): Promise<SyncResult | null
   return {
     inventory: (inv.data as DbInventory[]).map(dbToInventory),
     batches: allBatches.filter((r) => !r.deleted_at).map(dbToBatch),
+    deletedBatches: allBatches
+      .filter((r) => !!r.deleted_at)
+      .map((r) => ({ ...dbToBatch(r), deletedAt: r.deleted_at! })),
     sales: (sal.data as DbSale[]).map(dbToSale),
     buyers: (buy.data as DbBuyer[]).map(dbToBuyer),
     settings: set.data ? dbToSettings(set.data as DbSettings) : DEFAULT_SETTINGS,
@@ -277,6 +282,14 @@ export async function pushBatches(batches: Batch[], orgId: string): Promise<void
   const { error } = await supabase.from('batches')
     .upsert(batches.map((b) => batchToDb(b, orgId)));
   if (error) console.warn('batches push:', error.message);
+}
+
+export function pushBatchRestored(batchId: string, orgId: string) {
+  supabase.from('batches')
+    .update({ deleted_at: null })
+    .eq('id', batchId)
+    .eq('organization_id', orgId)
+    .then(({ error }) => { if (error) console.warn('batch restore:', error.message); });
 }
 
 export function pushBatchDeleted(batchId: string, orgId: string) {

@@ -45,3 +45,4 @@ yarn-error.*
 
 # Google Play service account key (contains sensitive credentials)
 google-service-account.json
+.vercel

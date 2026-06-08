@@ -114,3 +114,7 @@ export interface AppSettings {
   lowStockThreshold: number;
   exchangeRates: ExchangeRates;
 }
+
+export interface DeletedBatch extends Batch {
+  deletedAt: string;
+}

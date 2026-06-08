@@ -205,4 +205,16 @@ export default {
   confirmClearLeather: 'Очистить всю готовую кожу? Это действие нельзя отменить.',
   incompleteBuyersBanner: 'У некоторых покупателей отсутствуют контактные данные. Нажмите Редактировать для заполнения.',
   downloadPdf: 'Скачать PDF',
+
+  recentlyDeleted: 'Удалённые',
+  restore: 'Восстановить',
+  expiresIn: 'Истекает через',
+  days: 'дн.',
+
+  sortNewest: 'Сначала новые',
+  sortOldest: 'Сначала старые',
+  sortAZ: 'A → Z',
+  sortZA: 'Z → A',
+  sortNumeric: '# Порядок',
+  searchPlaceholder: 'Поиск...',
 };

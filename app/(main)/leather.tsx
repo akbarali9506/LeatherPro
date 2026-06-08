@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, Modal, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ export default function LeatherScreen() {
   const rates = settings.exchangeRates;
 
   const [view, setView] = useState<'batch' | 'grade'>('batch');
+  const [searchQuery, setSearchQuery] = useState('');
   const [editItem, setEditItem] = useState<InventoryItem | null>(null);
   const [editPrice, setEditPrice] = useState('');
   const [editCurrency, setEditCurrency] = useState<Currency>('USD');
@@ -31,17 +32,24 @@ export default function LeatherScreen() {
   const totalArea = finished.reduce((s, i) => s + i.qty, 0);
   const totalValue = finished.reduce((s, i) => s + toUSD(i.qty * i.price, i.currency, rates), 0);
 
+  const displayFinished = useMemo(() => {
+    if (!searchQuery.trim()) return finished;
+    const q = searchQuery.toLowerCase();
+    return finished.filter((i) => i.name.toLowerCase().includes(q) || (i.batchName ?? '').toLowerCase().includes(q));
+  }, [finished, searchQuery]);
+
   // Group by batch
-  const batchMap = new Map<string, InventoryItem[]>();
-  const manualItems: InventoryItem[] = [];
-  finished.forEach((item) => {
-    if (item.batchId) {
-      const key = item.batchId;
-      batchMap.set(key, [...(batchMap.get(key) ?? []), item]);
-    } else {
-      manualItems.push(item);
-    }
-  });
+  const batchMap = useMemo(() => {
+    const map = new Map<string, InventoryItem[]>();
+    displayFinished.forEach((item) => {
+      if (item.batchId) {
+        map.set(item.batchId, [...(map.get(item.batchId) ?? []), item]);
+      }
+    });
+    return map;
+  }, [displayFinished]);
+
+  const manualItems = useMemo(() => displayFinished.filter((i) => !i.batchId), [displayFinished]);
 
   function savePrice() {
     if (!editItem || !editPrice) return;
@@ -80,6 +88,24 @@ export default function LeatherScreen() {
         )}
       </View>
 
+      {/* Search */}
+      <View style={styles.searchBar}>
+        <Ionicons name="search-outline" size={18} color={Colors.textMuted} />
+        <TextInput
+          style={styles.searchInput}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder={t(lang, 'searchPlaceholder')}
+          placeholderTextColor={Colors.textMuted}
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <Ionicons name="close-circle" size={18} color={Colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
       {/* Toggle */}
       <View style={styles.toggle}>
         {(['batch', 'grade'] as const).map((v) => (
@@ -96,7 +122,7 @@ export default function LeatherScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {finished.length === 0 && (
+        {displayFinished.length === 0 && (
           <Text style={styles.emptyText}>{t(lang, 'noData')}</Text>
         )}
 
@@ -136,7 +162,7 @@ export default function LeatherScreen() {
         ) : (
           <>
             {GRADES.map((grade) => {
-              const items = finished.filter((i) => i.grade === grade);
+              const items = displayFinished.filter((i) => i.grade === grade);
               if (items.length === 0) return null;
               const gradeTotal = items.reduce((s, i) => s + i.qty, 0);
               const gradeValue = items.reduce((s, i) => s + toUSD(i.qty * i.price, i.currency, rates), 0);
@@ -312,6 +338,8 @@ function GradeRow({ item, isDirector, onEdit, onRename, onDelete }: {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, backgroundColor: Colors.surface, borderBottomWidth: 1, borderBottomColor: Colors.border, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm },
+  searchInput: { flex: 1, fontSize: FontSize.md, color: Colors.text, paddingVertical: 4 },
   summaryRow: { flexDirection: 'row', gap: Spacing.sm, padding: Spacing.lg, paddingBottom: 0, alignItems: 'center', flexWrap: 'wrap' },
   summaryCard: { flex: 1, backgroundColor: Colors.surface, borderRadius: Radius.md, padding: Spacing.md, alignItems: 'center' },
   pdfBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: Spacing.sm, paddingVertical: 6, borderRadius: Radius.sm, borderWidth: 1, borderColor: Colors.primary + '50' },

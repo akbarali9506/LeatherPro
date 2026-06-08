@@ -754,13 +754,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const batch = state.deletedBatches.find((b) => b.id === batchId);
       if (!batch) return;
       const { deletedAt: _d, ...batchData } = batch;
+
+      // Re-deduct chemicals and wet blue
+      let inventory = [...state.inventory];
+      batchData.chemicals.forEach((c) => {
+        inventory = inventory.map((i) => i.id === c.id ? { ...i, qty: Math.max(0, i.qty - c.usedQty) } : i);
+      });
+      batchData.wetBlue.forEach((w) => {
+        inventory = inventory.map((i) => i.id === w.id ? { ...i, qty: Math.max(0, i.qty - w.qty) } : i);
+      });
+
+      // Re-create finished leather items
+      const newLeatherItems: InventoryItem[] = [];
+      GRADES.forEach((grade) => {
+        const out: GradeOutput = batchData.output[grade as Grade];
+        if (out.qty > 0) {
+          const id = nextInventoryId(
+            [...inventory, ...newLeatherItems],
+            'Finished Leather',
+          );
+          const item: InventoryItem = {
+            id, name: `${batchData.name} - ${grade}`, type: 'Finished Leather',
+            qty: out.qty, unit: 'dm²', price: out.price, currency: out.currency,
+            grade: grade as Grade, batchId, batchName: batchData.name,
+          };
+          inventory.push(item);
+          newLeatherItems.push(item);
+        }
+      });
+
       const updatedDeleted = state.deletedBatches.filter((b) => b.id !== batchId);
       const updatedBatches = [...state.batches, batchData];
+
+      dispatch({ type: 'SET_INVENTORY', payload: inventory });
       dispatch({ type: 'SET_DELETED_BATCHES', payload: updatedDeleted });
       dispatch({ type: 'SET_BATCHES', payload: updatedBatches });
-      if (state.orgId) { pushBatchRestored(batchId, state.orgId); broadcastChange(); }
+
+      if (state.orgId) {
+        const orgId = state.orgId;
+        const changedRawIds = new Set([
+          ...batchData.chemicals.map((c) => c.id),
+          ...batchData.wetBlue.map((w) => w.id),
+        ]);
+        const rawItems = inventory.filter((i) => changedRawIds.has(i.id));
+        if (rawItems.length > 0) pushInventory(rawItems, orgId);
+        if (newLeatherItems.length > 0) pushInventory(newLeatherItems, orgId);
+        pushBatchRestored(batchId, orgId);
+        broadcastChange();
+      }
     },
-    [state.deletedBatches, state.batches, state.orgId, broadcastChange],
+    [state.deletedBatches, state.batches, state.inventory, state.orgId, broadcastChange],
   );
 
   const updateSettings = useCallback(

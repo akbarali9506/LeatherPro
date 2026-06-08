@@ -310,6 +310,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (result) {
       dispatch({ type: 'SET_INVENTORY', payload: result.inventory });
       dispatch({ type: 'SET_BATCHES', payload: result.batches });
+      dispatch({ type: 'SET_DELETED_BATCHES', payload: result.deletedBatches });
       dispatch({ type: 'SET_SALES', payload: result.sales });
       dispatch({ type: 'SET_BUYERS', payload: result.buyers });
       dispatch({ type: 'SET_SETTINGS', payload: result.settings });
@@ -538,7 +539,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         })();
       }
     },
-    [state.inventory, state.batches, state.sales, state.settings.exchangeRates, state.orgId, broadcastChange],
+    [state.inventory, state.batches, state.deletedBatches, state.sales, state.settings.exchangeRates, state.orgId, broadcastChange],
   );
 
   const deleteBatch = useCallback(

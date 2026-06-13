@@ -342,8 +342,12 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
     }
   }, [visible, editBatch]);
 
-  const wetBlueItems = inventory.filter((i) => i.type === 'Wet Blue' && i.qty > 0);
-  const chemItems = inventory.filter((i) => i.type === 'Chemical' && i.qty > 0);
+  const wetBlueItems = inventory.filter((i) =>
+    i.type === 'Wet Blue' && (i.qty > 0 || editBatch?.wetBlue.some((w) => w.id === i.id)),
+  );
+  const chemItems = inventory.filter((i) =>
+    i.type === 'Chemical' && (i.qty > 0 || editBatch?.chemicals.some((c) => c.id === i.id)),
+  );
 
   const currentStep = STEPS[step];
 

@@ -23,7 +23,7 @@ import { Currency, InventoryItem, ItemType, Language } from '../../types';
 const CURRENCIES: Currency[] = ['USD', 'UZS'];
 
 export default function StockScreen() {
-  const { inventory, settings, role, addInventoryItem, addStock, updateItemPrice, updateItemUnit, deleteInventoryItem } = useApp();
+  const { inventory, settings, role, addInventoryItem, addStock, updateItemPrice, updateItemUnit, updateItemQty, deleteInventoryItem } = useApp();
   const lang = settings.language;
   const isDirector = role === 'director';
   const router = useRouter();
@@ -31,7 +31,7 @@ export default function StockScreen() {
 
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [modal, setModal] = useState<'addItem' | 'addStock' | 'editUnit' | 'editPrice' | 'addLeather' | null>(null);
+  const [modal, setModal] = useState<'addItem' | 'addStock' | 'editUnit' | 'editPrice' | 'editQty' | 'addLeather' | null>(null);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
 
   // Form state
@@ -95,6 +95,12 @@ export default function StockScreen() {
   function handleEditPrice() {
     if (!selectedItem || !formPrice) return;
     updateItemPrice(selectedItem.id, parseFloat(formPrice), formCurrency);
+    setModal(null);
+  }
+
+  function handleEditQty() {
+    if (!selectedItem || formQty === '') return;
+    updateItemQty(selectedItem.id, parseFloat(formQty));
     setModal(null);
   }
 
@@ -186,11 +192,10 @@ export default function StockScreen() {
             onAddStock={() => openModal('addStock', item)}
             onEditUnit={() => openModal('editUnit', item)}
             onEditPrice={() => openModal('editPrice', item)}
+            onEditQty={() => openModal('editQty', item)}
             onDelete={() => deleteInventoryItem(item.id)}
           />
         ))}
-
-        {/* Section: Wet Blue */}
         {wetBlue.length > 0 && (
           <SectionHeader icon="🐄" title={t(lang, 'wetBlue')} />
         )}
@@ -207,6 +212,7 @@ export default function StockScreen() {
             onAddStock={() => openModal('addStock', item)}
             onEditUnit={() => openModal('editUnit', item)}
             onEditPrice={() => openModal('editPrice', item)}
+            onEditQty={() => openModal('editQty', item)}
             onDelete={() => deleteInventoryItem(item.id)}
           />
         ))}
@@ -320,6 +326,26 @@ export default function StockScreen() {
         </View>
       </FormModal>
 
+      {/* Edit Quantity Modal */}
+      <FormModal
+        visible={modal === 'editQty'}
+        title={`Edit Quantity: ${selectedItem?.name}`}
+        onClose={() => setModal(null)}
+        onSave={handleEditQty}
+        saveLabel={t(lang, 'save')}
+        lang={lang}
+      >
+        <FieldLabel label={`${t(lang, 'quantity')} (${selectedItem?.unit ?? ''})`} />
+        <TextInput
+          style={styles.input}
+          value={formQty}
+          onChangeText={setFormQty}
+          keyboardType="decimal-pad"
+          placeholder="0"
+          autoFocus
+        />
+      </FormModal>
+
       {/* Add Finished Leather Modal */}
       <FormModal
         visible={modal === 'addLeather'}
@@ -358,10 +384,10 @@ function SectionHeader({ icon, title }: { icon: string; title: string }) {
 
 function ItemCard({
   item, isExpanded, isEmpty, isLow, isDirector, lang,
-  onPress, onAddStock, onEditUnit, onEditPrice, onDelete,
+  onPress, onAddStock, onEditUnit, onEditPrice, onEditQty, onDelete,
 }: {
   item: InventoryItem; isExpanded: boolean; isEmpty: boolean; isLow: boolean; isDirector: boolean; lang: Language;
-  onPress: () => void; onAddStock: () => void; onEditUnit: () => void; onEditPrice: () => void; onDelete: () => void;
+  onPress: () => void; onAddStock: () => void; onEditUnit: () => void; onEditPrice: () => void; onEditQty: () => void; onDelete: () => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -415,6 +441,7 @@ function ItemCard({
               <ActionBtn label={t(lang, 'addStock')} icon="add-circle-outline" onPress={onAddStock} />
               {isDirector && (
                 <>
+                  <ActionBtn label="Edit Qty" icon="create-outline" onPress={onEditQty} />
                   <ActionBtn label={t(lang, 'editPrice')} icon="pricetag-outline" onPress={onEditPrice} />
                   <ActionBtn label={t(lang, 'deleteItem')} icon="trash-outline" onPress={() => setConfirmDelete(true)} color={Colors.error} />
                 </>

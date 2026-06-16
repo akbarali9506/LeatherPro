@@ -114,6 +114,7 @@ interface AppContextType extends State {
   updateItemPrice: (itemId: string, price: number, currency: Currency) => void;
   updateItemUnit: (itemId: string, unit: string) => void;
   updateItemName: (itemId: string, name: string) => void;
+  updateItemQty: (itemId: string, qty: number) => void;
   deleteInventoryItem: (itemId: string) => void;
   clearLeatherWarehouse: () => void;
   resolvePriceReview: (itemId: string, choice: 'new' | 'avg' | 'old') => void;
@@ -405,6 +406,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateItemName = useCallback(
     (itemId: string, name: string) => {
       const updated = state.inventory.map((i) => (i.id === itemId ? { ...i, name } : i));
+      dispatch({ type: 'SET_INVENTORY', payload: updated });
+      if (state.orgId) {
+        const item = updated.find((i) => i.id === itemId);
+        if (item) pushInventory([item], state.orgId);
+        broadcastChange();
+      }
+    },
+    [state.inventory, state.orgId, broadcastChange],
+  );
+
+  const updateItemQty = useCallback(
+    (itemId: string, qty: number) => {
+      const updated = state.inventory.map((i) => (i.id === itemId ? { ...i, qty } : i));
       dispatch({ type: 'SET_INVENTORY', payload: updated });
       if (state.orgId) {
         const item = updated.find((i) => i.id === itemId);
@@ -862,7 +876,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...state,
       logout,
       refreshProfile,
-      addInventoryItem, addStock, updateItemPrice, updateItemUnit, updateItemName, deleteInventoryItem, clearLeatherWarehouse,
+      addInventoryItem, addStock, updateItemPrice, updateItemUnit, updateItemName, updateItemQty, deleteInventoryItem, clearLeatherWarehouse,
       resolvePriceReview,
       saveBatch, deleteBatch, restoreBatch,
       addSale, deleteSale, updateSalePrice, updateSalePayment,

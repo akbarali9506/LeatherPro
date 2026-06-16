@@ -15,7 +15,7 @@ const GRADE_LIGHT = { 'Grade 1': Colors.grade1Light, 'Grade 2': Colors.grade2Lig
 const GRADE_LABEL: Record<Grade, string> = { 'Grade 1': 'S1', 'Grade 2': 'S2', 'Grade 3': 'S3' };
 
 export default function LeatherScreen() {
-  const { inventory, settings, role, updateItemPrice, updateItemName, deleteInventoryItem } = useApp();
+  const { inventory, settings, role, updateItemPrice, updateItemName, updateItemQty, deleteInventoryItem } = useApp();
   const lang = settings.language;
   const isDirector = role === 'director';
   const rates = settings.exchangeRates;
@@ -27,6 +27,8 @@ export default function LeatherScreen() {
   const [editCurrency, setEditCurrency] = useState<Currency>('USD');
   const [renameItem, setRenameItem] = useState<InventoryItem | null>(null);
   const [renameText, setRenameText] = useState('');
+  const [editQtyItem, setEditQtyItem] = useState<InventoryItem | null>(null);
+  const [editQtyValue, setEditQtyValue] = useState('');
 
   const finished = inventory.filter((i) => i.type === 'Finished Leather' && i.qty > 0);
   const totalArea = finished.reduce((s, i) => s + i.qty, 0);
@@ -61,6 +63,12 @@ export default function LeatherScreen() {
     if (!renameItem || !renameText.trim()) return;
     updateItemName(renameItem.id, renameText.trim());
     setRenameItem(null);
+  }
+
+  function saveQty() {
+    if (!editQtyItem || editQtyValue === '') return;
+    updateItemQty(editQtyItem.id, parseFloat(editQtyValue));
+    setEditQtyItem(null);
   }
 
   return (
@@ -137,6 +145,7 @@ export default function LeatherScreen() {
                     item={item}
                     isDirector={isDirector}
                     onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
+                    onEditQty={() => { setEditQtyItem(item); setEditQtyValue(String(item.qty)); }}
                     onRename={() => { setRenameItem(item); setRenameText(item.name); }}
                     onDelete={() => deleteInventoryItem(item.id)}
                   />
@@ -152,6 +161,7 @@ export default function LeatherScreen() {
                     item={item}
                     isDirector={isDirector}
                     onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
+                    onEditQty={() => { setEditQtyItem(item); setEditQtyValue(String(item.qty)); }}
                     onRename={() => { setRenameItem(item); setRenameText(item.name); }}
                     onDelete={() => deleteInventoryItem(item.id)}
                   />
@@ -181,7 +191,8 @@ export default function LeatherScreen() {
                       item={item}
                       isDirector={isDirector}
                       onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
-                      onRename={() => { setRenameItem(item); setRenameText(item.name); }}
+                      onEditQty={() => { setEditQtyItem(item); setEditQtyValue(String(item.qty)); }}
+                    onRename={() => { setRenameItem(item); setRenameText(item.name); }}
                       onDelete={() => deleteInventoryItem(item.id)}
                     />
                   ))}
@@ -208,7 +219,8 @@ export default function LeatherScreen() {
                       item={item}
                       isDirector={isDirector}
                       onEdit={() => { setEditItem(item); setEditPrice(String(item.price)); setEditCurrency(item.currency); }}
-                      onRename={() => { setRenameItem(item); setRenameText(item.name); }}
+                      onEditQty={() => { setEditQtyItem(item); setEditQtyValue(String(item.qty)); }}
+                    onRename={() => { setRenameItem(item); setRenameText(item.name); }}
                       onDelete={() => deleteInventoryItem(item.id)}
                     />
                   ))}
@@ -280,12 +292,37 @@ export default function LeatherScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Edit quantity modal */}
+      <Modal visible={!!editQtyItem} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Quantity: {editQtyItem?.name}</Text>
+            <Text style={styles.fieldLabel}>Quantity (dm²)</Text>
+            <TextInput
+              style={styles.input}
+              value={editQtyValue}
+              onChangeText={setEditQtyValue}
+              keyboardType="decimal-pad"
+              autoFocus
+            />
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditQtyItem(null)}>
+                <Text style={styles.cancelBtnText}>{t(lang, 'cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={saveQty}>
+                <Text style={styles.saveBtnText}>{t(lang, 'save')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
 
-function GradeRow({ item, isDirector, onEdit, onRename, onDelete }: {
-  item: InventoryItem; isDirector: boolean; onEdit: () => void; onRename: () => void; onDelete: () => void;
+function GradeRow({ item, isDirector, onEdit, onEditQty, onRename, onDelete }: {
+  item: InventoryItem; isDirector: boolean; onEdit: () => void; onEditQty: () => void; onRename: () => void; onDelete: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const color = item.grade ? GRADE_COLORS[item.grade] : Colors.primary;
@@ -320,6 +357,11 @@ function GradeRow({ item, isDirector, onEdit, onRename, onDelete }: {
       {isDirector && (
         <TouchableOpacity onPress={onRename}>
           <Ionicons name="text-outline" size={16} color={Colors.textSecondary} />
+        </TouchableOpacity>
+      )}
+      {isDirector && (
+        <TouchableOpacity onPress={onEditQty}>
+          <Ionicons name="calculator-outline" size={16} color={Colors.textSecondary} />
         </TouchableOpacity>
       )}
       {isDirector && (

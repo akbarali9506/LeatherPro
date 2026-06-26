@@ -373,8 +373,6 @@ function BatchWizard({ visible, editBatch, onClose, onSave }: {
   const chemZeroSelected = data.chemicals.some((c) => c.usedQty <= 0);
 
   function goNext() {
-    if (currentStep === 'rawMaterial' && (wetBlueOverage || wetBlueZeroSelected)) return;
-    if (currentStep === 'chemicals_step' && (chemOverage || chemZeroSelected)) return;
     if (step < STEPS.length - 1) setStep(s => s + 1);
   }
   function goBack() { if (step > 0) setStep(s => s - 1); }
